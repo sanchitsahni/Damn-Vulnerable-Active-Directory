@@ -1,0 +1,80 @@
+---
+# ==============================================================================
+# DVAD - ACL Abuse Configuration
+# Target: dc01.corp.local
+# ==============================================================================
+
+- name: Grant GenericAll from user1 to user2 (take over account)
+  win_shell: |
+    Import-Module ActiveDirectory
+    $source = Get-ADUser -Identity "user1"
+    $target = Get-ADUser -Identity "user2"
+    $sid = New-Object System.Security.Principal.SecurityIdentifier ($source.SID)
+    $acl = Get-ACL "AD:\$target"
+    $rule = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sid, "GenericAll", "Allow")
+    $acl.AddAccessRule($rule)
+    Set-ACL "AD:\$target" $acl
+  ignore_errors: yes
+
+- name: Grant WriteSPN to helpdesk on svc_web (Kerberoast pivot)
+  win_shell: |
+    Import-Module ActiveDirectory
+    $source = Get-ADUser -Identity "helpdesk"
+    $target = Get-ADUser -Identity "svc_web"
+    $sid = New-Object System.Security.Principal.SecurityIdentifier ($source.SID)
+    $acl = Get-ACL "AD:\$target"
+    $rule = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sid, "WriteProperty", "Allow", [guid]"f3a64788-5306-11d1-a9c5-0000f80367c1")
+    $acl.AddAccessRule($rule)
+    Set-ACL "AD:\$target" $acl
+  ignore_errors: yes
+
+- name: Grant AddSelf on IT Admins to qa_user (group membership abuse)
+  win_shell: |
+    Import-Module ActiveDirectory
+    $source = Get-ADUser -Identity "qa_user"
+    $target = Get-ADGroup -Identity "IT Admins"
+    $sid = New-Object System.Security.Principal.SecurityIdentifier ($source.SID)
+    $acl = Get-ACL "AD:\$target"
+    $rule = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sid, "Self", "Allow")
+    $acl.AddAccessRule($rule)
+    Set-ACL "AD:\$target" $acl
+  ignore_errors: yes
+
+- name: ForceChangePassword from developer1 to helpdesk
+  win_shell: |
+    Import-Module ActiveDirectory
+    $source = Get-ADUser -Identity "developer1"
+    $target = Get-ADUser -Identity "helpdesk"
+    $sid = New-Object System.Security.Principal.SecurityIdentifier ($source.SID)
+    $acl = Get-ACL "AD:\$target"
+    $rule = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sid, "ExtendedRight", "Allow", [guid]"00299570-246d-11d0-a768-00aa006e0529")
+    $acl.AddAccessRule($rule)
+    Set-ACL "AD:\$target" $acl
+  ignore_errors: yes
+
+- name: Grant GenericAll from domain user to DACL for RBCD comps
+  win_shell: |
+    Import-Module ActiveDirectory
+    $source = Get-ADUser -Identity "attacker"
+    $comps = @("FILE01","SQL01")
+    foreach ($c in $comps) {
+      $comp = Get-ADComputer -Identity $c
+      $sid = New-Object System.Security.Principal.SecurityIdentifier ($source.SID)
+      $acl = Get-ACL "AD:\$comp"
+      $rule = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sid, "GenericAll", "Allow")
+      $acl.AddAccessRule($rule)
+      Set-ACL "AD:\$comp" $acl
+    }
+  ignore_errors: yes
+
+- name: Weak ACL on AdminSDHolder container (PER-015)
+  win_shell: |
+    Import-Module ActiveDirectory
+    $source = Get-ADUser -Identity "user3"
+    $target = Get-ADObject -Identity "CN=AdminSDHolder,CN=System,DC=corp,DC=local"
+    $sid = New-Object System.Security.Principal.SecurityIdentifier ($source.SID)
+    $acl = Get-ACL "AD:\$target"
+    $rule = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sid, "GenericAll", "Allow")
+    $acl.AddAccessRule($rule)
+    Set-ACL "AD:\$target" $acl
+  ignore_errors: yes

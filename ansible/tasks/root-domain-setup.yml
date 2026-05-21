@@ -1,0 +1,91 @@
+---
+# ==============================================================================
+# DVAD - ROOT.CORP Forest Setup
+# Target: dc01.root.corp
+# ==============================================================================
+
+- name: Set static IP and DNS
+  win_shell: |
+    $adapter = Get-NetAdapter | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
+    $ip = "10.30.0.10"
+    $prefix = 24
+    $gateway = "10.30.0.1"
+    $dns = "10.30.0.10"
+    netsh interface ip set address "$($adapter.Name)" static $ip 255.255.255.0 $gateway 1
+    netsh interface ip set dns "$($adapter.Name)" static $dns
+    Write-Host "IP configured: $ip/24, DNS: $dns"
+
+- name: Set hostname
+  win_hostname:
+    name: "DC01-ROOT"
+  register: hostname_result
+
+- name: Install AD DS Features
+  win_feature:
+    name:
+      - AD-Domain-Services
+      - DNS
+      - GPMC
+      - RSAT-ADDS
+      - RSAT-DNS-Server
+      - RSAT-AD-PowerShell
+    state: present
+    include_management_tools: yes
+  register: ad_ds_install
+
+- name: Reboot if required
+  win_reboot:
+  when: ad_ds_install.reboot_required or hostname_result.reboot_required
+
+- name: Wait for host to come back
+  wait_for_connection:
+    delay: 30
+    timeout: 600
+
+- name: Create new forest root.corp
+  win_shell: |
+    Import-Module ADDSDeployment
+    $params = @{
+      DomainName                    = "root.corp"
+      DomainNetbiosName             = "ROOT"
+      ForestMode                    = "WinThreshold"
+      DomainMode                    = "WinThreshold"
+      DatabasePath                  = "C:\Windows\NTDS"
+      LogPath                       = "C:\Windows\NTDS"
+      SysvolPath                    = "C:\Windows\SYSVOL"
+      SafeModeAdministratorPassword = (ConvertTo-SecureString "DVADlab2024!" -AsPlainText -Force)
+      InstallDns                    = $true
+      CreateDnsDelegation           = $false
+      NoRebootOnCompletion          = $true
+      Force                         = $true
+    }
+    Install-ADDSForest @params
+  register: forest_promotion
+
+- name: Reboot after promotion
+  win_reboot:
+    reboot_timeout: 600
+
+- name: Wait for DC to come back
+  wait_for_connection:
+    delay: 45
+    timeout: 600
+
+- name: Create OUs and groups for root.corp
+  win_shell: |
+    Import-Module ActiveDirectory
+    New-ADOrganizationalUnit -Name "Root" -Path "DC=root,DC=corp" -ProtectedFromAccidentalDeletion $false -ErrorAction SilentlyContinue
+    New-ADOrganizationalUnit -Name "ServiceAccounts" -Path "DC=root,DC=corp" -ProtectedFromAccidentalDeletion $false -ErrorAction SilentlyContinue
+    New-ADGroup -Name "Root Admins" -SamAccountName "Root Admins" -GroupCategory Security -GroupScope Universal -Path "OU=Root,DC=root,DC=corp" -ErrorAction SilentlyContinue
+    $users = @(
+      @{Name="root_user1"; Password="Root1234!"; Groups=@("Domain Users")},
+      @{Name="root_adm"; Password="RootAdm2025!"; Groups=@("Domain Users", "Root Admins", "Schema Admins", "Enterprise Admins")}
+    )
+    foreach ($u in $users) {
+      $secPwd = ConvertTo-SecureString $u.Password -AsPlainText -Force
+      try {
+        New-ADUser -Name $u.Name -SamAccountName $u.Name -UserPrincipalName "$($u.Name)@root.corp" -AccountPassword $secPwd -Enabled $true -PasswordNeverExpires $true -Path "OU=Root,DC=root,DC=corp" -ErrorAction SilentlyContinue
+      } catch {}
+      foreach ($g in $u.Groups) { try { Add-ADGroupMember -Identity $g -Members $u.Name } catch {} }
+    }
+  ignore_errors: yes

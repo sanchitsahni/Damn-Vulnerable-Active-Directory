@@ -1,0 +1,59 @@
+================================================================================
+   DVAD - Deployable Vulnerable Active Directory Lab
+   Game of AD v2.0 - Participant Handout
+================================================================================
+
+LAB NETWORK DETAILS
+-------------------
+Corp Domain:    corp.local (10.10.0.0/21)
+Child Domain:   eu.corp.local
+Finance Domain: finance.local (10.20.0.0/24)
+Root Domain:    root.corp (10.30.0.0/24)
+
+TARGET SYSTEMS
+--------------
+  dc01.corp.local      10.10.0.10    Primary DC (corp.local)
+  dc01.eu.corp.local   10.10.0.11    Child DC (eu.corp.local)
+  ca01.corp.local      10.10.0.12    ADCS CA Server
+  file01.corp.local    10.10.0.13    File Server (unconstrained delegation)
+  sql01.corp.local     10.10.0.14    SQL Server (RBCD target)
+  ws01.corp.local      10.10.0.100   Attacker Workstation
+  dc01.finance.local   10.20.0.10    Finance DC
+  dc01.root.corp       10.30.0.10    Root Corp DC
+
+INITIAL CREDENTIALS
+-------------------
+  DOMAIN: corp.local
+  USER:   attacker
+  PASS:   DVADlab2024!
+
+WEAK ACCOUNTS (for password spray)
+  user1 / Password123!
+  user2 / Welcome1
+  user3 / Summer2025!
+  user4 / Password123!
+
+OBJECTIVE
+---------
+  Compromise the Active Directory environment starting from a domain
+  user and escalate to Enterprise Admin. Find flags hidden across the
+  lab. Each successful attack technique reveals a flag in C:\Flags\.
+
+QUICK START
+-----------
+  1. Log into ws01.corp.local with corp\attacker / DVADlab2024!
+  2. Open PowerShell: cd C:\DVAD\tools
+  3. Start recon:  .\SharpView.exe All -Domain corp.local
+  4. Find Kerberoast targets: .\Rubeus.exe kerberoast /outfile:hashes.txt
+  5. Crack hashes with hashcat
+
+USEFUL TOOLS
+------------
+  BloodHound, SharpHound, Rubeus, Certify, Seatbelt, SharpUp
+  Mimikatz, Responder, Inveigh, Impacket (Python)
+
+HINT: Start with Recon -> Credential Access -> Lateral Movement ->
+      Domain Compromise -> Persistence
+
+Good luck! May the pass be with you.
+================================================================================

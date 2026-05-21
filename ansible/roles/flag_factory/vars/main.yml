@@ -1,0 +1,422 @@
+---
+# ==============================================================================
+# DVAD - Flag Manifest (single source of truth)
+# Every PLAN.md attack-matrix ID. Drives flag_factory role.
+#
+# Schema:
+#   id        : matrix ID
+#   cat       : category (Recon, Credential, Lateral, PrivilegeEsc,
+#               Persistence, DomainForest, InitialAccess, Enumeration)
+#   desc      : short description (also used in flag content)
+#   host      : inventory_hostname where the flag is dropped
+#   acl       : "system_only" | "admins" | "domain_users" | "everyone"
+#
+# host == "" means "drop on dc01.corp.local by default". Many runtime-only
+# techniques (forge ticket, dump LSASS, etc.) have a meaningful staging host
+# even though the actual exploitation happens at runtime.
+# ==============================================================================
+
+flag_manifest:
+  # ----- Recon (REC-001..REC-015) -----
+  - { id: REC-001, cat: Recon,      desc: "Enumerated Domain Users",                 host: dc01.corp.local,  acl: domain_users }
+  - { id: REC-002, cat: Recon,      desc: "Discovered ServicePrincipalNames",        host: dc01.corp.local,  acl: domain_users }
+  - { id: REC-003, cat: Recon,      desc: "BloodHound Ingestor Results",             host: dc01.corp.local,  acl: domain_users }
+  - { id: REC-004, cat: Recon,      desc: "Enumerated Trust Relationships",          host: dc01.corp.local,  acl: domain_users }
+  - { id: REC-005, cat: Recon,      desc: "Enumerated GPOs",                         host: dc01.corp.local,  acl: domain_users }
+  - { id: REC-006, cat: Recon,      desc: "Enumerated ACLs on AD Objects",           host: dc01.corp.local,  acl: domain_users }
+  - { id: REC-007, cat: Recon,      desc: "DNS Zone Transfer AXFR",                  host: dc01.corp.local,  acl: everyone }
+  - { id: REC-008, cat: Recon,      desc: "SMB Share Enumeration",                   host: file01.corp.local, acl: domain_users }
+  - { id: REC-009, cat: Recon,      desc: "MSSQL Instance Enumeration",              host: sql01.corp.local,  acl: domain_users }
+  - { id: REC-010, cat: Recon,      desc: "LLMNR/NBT-NS Poisoning Enabled",          host: ws01.corp.local,   acl: domain_users }
+  - { id: REC-011, cat: Recon,      desc: "Password Policy Enumeration",             host: dc01.corp.local,  acl: domain_users }
+  - { id: REC-012, cat: Recon,      desc: "ADCS Template Enumeration",               host: ca01.corp.local,  acl: domain_users }
+  - { id: REC-013, cat: Recon,      desc: "AS-REP Roastable Accounts Found",         host: dc01.corp.local,  acl: domain_users }
+  - { id: REC-014, cat: Recon,      desc: "Machine Account Enumeration",             host: dc01.corp.local,  acl: domain_users }
+  - { id: REC-015, cat: Recon,      desc: "Credentials in SYSVOL Scripts",           host: dc01.corp.local,  acl: domain_users }
+
+  # ----- Credential Access (CRED-001..CRED-065) -----
+  - { id: CRED-001, cat: Credential, desc: "Kerberoasted svc_web",                   host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-002, cat: Credential, desc: "AS-REP Roasted svc_nopreauth",           host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-003, cat: Credential, desc: "Password Spray Success",                 host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-004, cat: Credential, desc: "Credential Hunting (SYSVOL/Files)",      host: file01.corp.local, acl: system_only }
+  - { id: CRED-005, cat: Credential, desc: "LSASS Memory Dump",                      host: ws01.corp.local,   acl: system_only }
+  - { id: CRED-006, cat: Credential, desc: "SAM Database Extracted",                 host: ws01.corp.local,   acl: system_only }
+  - { id: CRED-007, cat: Credential, desc: "NTDS.dit Extraction via Shadow Copy",    host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-008, cat: Credential, desc: "Shadow Credentials (KeyCredentialLink)", host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-009, cat: Credential, desc: "Reversible Password Decrypted",          host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-010, cat: Credential, desc: "Token Impersonation",                    host: ws01.corp.local,   acl: system_only }
+  - { id: CRED-011, cat: Credential, desc: "Pass-the-Hash Success",                  host: file01.corp.local, acl: system_only }
+  - { id: CRED-012, cat: Credential, desc: "Pass-the-Ticket",                        host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-013, cat: Credential, desc: "DCSync Executed",                        host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-014, cat: Credential, desc: "DCSync with GetChangesAll",              host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-015, cat: Credential, desc: "DCShadow Rogue DC",                      host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-016, cat: Credential, desc: "Constrained Delegation Abuse",           host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-017, cat: Credential, desc: "RBCD Abuse",                             host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-018, cat: Credential, desc: "Unconstrained Delegation Abuse",         host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-019, cat: Credential, desc: "PrintNightmare Credential Dump",         host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-020, cat: Credential, desc: "PetitPotam NTLM Relay",                  host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-021, cat: Credential, desc: "DFSCoerce NTLM Relay",                   host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-022, cat: Credential, desc: "PrinterBug NTLM Relay",                  host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-023, cat: Credential, desc: "noPac SAMAccountName Abuse",             host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-024, cat: Credential, desc: "Certifried (CVE-2022-26923)",            host: ca01.corp.local,  acl: system_only }
+  - { id: CRED-025, cat: Credential, desc: "WebClient Service Abuse",                host: ws01.corp.local,   acl: system_only }
+  - { id: CRED-026, cat: Credential, desc: "ADIDNS Wildcard Poisoning",              host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-027, cat: Credential, desc: "ADCS SAN Validation Bypass",             host: ca01.corp.local,  acl: system_only }
+  - { id: CRED-028, cat: Credential, desc: "ESC15 (CVE-2024-49019)",                 host: ca01.corp.local,  acl: system_only }
+  - { id: CRED-029, cat: Credential, desc: "Hash Downgrade Negotiation",             host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-030, cat: Credential, desc: "GPP Password Extraction",                host: dc01.corp.local,  acl: domain_users }
+  - { id: CRED-031, cat: Credential, desc: "AS-REP Roasting Wide Sweep",             host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-032, cat: Credential, desc: "LDAP Simple Bind Interception",          host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-033, cat: Credential, desc: "LAPS Password Read",                     host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-034, cat: Credential, desc: "gMSA Password Read",                     host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-035, cat: Credential, desc: "Credential Manager Dump",                host: ws01.corp.local,   acl: system_only }
+  - { id: CRED-036, cat: Credential, desc: "Browser Credentials Extracted",          host: ws01.corp.local,   acl: system_only }
+  - { id: CRED-037, cat: Credential, desc: "AzureAD SSO Token (lab marker)",         host: ws01.corp.local,   acl: system_only }
+  - { id: CRED-038, cat: Credential, desc: "SSP Injection (mimilib)",                host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-039, cat: Credential, desc: "SeBackupPrivilege Abuse",                host: file01.corp.local, acl: system_only }
+  - { id: CRED-040, cat: Credential, desc: "SeTrustedCredManAccessPrivilege",        host: ws01.corp.local,   acl: system_only }
+  - { id: CRED-041, cat: Credential, desc: "SeDebugPrivilege LSASS Dump",            host: ws01.corp.local,   acl: system_only }
+  - { id: CRED-042, cat: Credential, desc: "SeImpersonatePrivilege Abuse",           host: file01.corp.local, acl: system_only }
+  - { id: CRED-043, cat: Credential, desc: "RID Hijacking",                          host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-044, cat: Credential, desc: "VSS Admin Snapshot Hash Dump",           host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-045, cat: Credential, desc: "DPAPI Master Key Theft",                 host: ws01.corp.local,   acl: system_only }
+  - { id: CRED-046, cat: Credential, desc: "Responder NTLMv2 Capture",               host: ws01.corp.local,   acl: system_only }
+  - { id: CRED-047, cat: Credential, desc: "Certificate Private Key Export",         host: ca01.corp.local,  acl: system_only }
+  - { id: CRED-048, cat: Credential, desc: "NTLM Relay to LDAPS (no CB)",            host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-049, cat: Credential, desc: "WebDAV Coercion to LDAP",                host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-050, cat: Credential, desc: "DNSSEC ZSK Leak",                        host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-051, cat: Credential, desc: "Shadow Credentials via msDS-KeyCred",    host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-052, cat: Credential, desc: "Kerberos Pre-Auth Hash Capture",         host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-053, cat: Credential, desc: "WDigest UseLogonCredential",             host: ws01.corp.local,   acl: system_only }
+  - { id: CRED-054, cat: Credential, desc: "Cached Domain Credentials (MSCachev2)",  host: ws01.corp.local,   acl: system_only }
+  - { id: CRED-055, cat: Credential, desc: "Kerberos AES Key Extract",               host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-056, cat: Credential, desc: "krbtgt Hash via DCSync",                 host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-057, cat: Credential, desc: "Pre-Created Computer Password",          host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-058, cat: Credential, desc: "DSRM Administrator Password",            host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-059, cat: Credential, desc: "Service Account Plaintext (LSA Secret)", host: file01.corp.local, acl: system_only }
+  - { id: CRED-060, cat: Credential, desc: "Autologon Plaintext (Winlogon Reg)",     host: ws01.corp.local,   acl: system_only }
+  - { id: CRED-061, cat: Credential, desc: "Unattend.xml Plaintext",                 host: ws01.corp.local,   acl: system_only }
+  - { id: CRED-062, cat: Credential, desc: "PowerShell History Plaintext",           host: ws01.corp.local,   acl: domain_users }
+  - { id: CRED-063, cat: Credential, desc: "Recycle Bin Credential Files",           host: ws01.corp.local,   acl: domain_users }
+  - { id: CRED-064, cat: Credential, desc: "Network Capture (pcap on share)",        host: file01.corp.local, acl: domain_users }
+  - { id: CRED-065, cat: Credential, desc: "KeePass DB + Master Key",                host: ws01.corp.local,   acl: system_only }
+
+  # ----- Lateral Movement (LAT-001..LAT-035) -----
+  - { id: LAT-001, cat: Lateral, desc: "PsExec Pass-the-Hash",                       host: file01.corp.local, acl: system_only }
+  - { id: LAT-002, cat: Lateral, desc: "WMI Exec",                                   host: file01.corp.local, acl: system_only }
+  - { id: LAT-003, cat: Lateral, desc: "Scheduled Task Creation Remote",             host: file01.corp.local, acl: system_only }
+  - { id: LAT-004, cat: Lateral, desc: "Service Creation Remote",                    host: file01.corp.local, acl: system_only }
+  - { id: LAT-005, cat: Lateral, desc: "DCOM Execution",                             host: ws01.corp.local,   acl: system_only }
+  - { id: LAT-006, cat: Lateral, desc: "WinRM Remote Shell",                         host: ws01.corp.local,   acl: system_only }
+  - { id: LAT-007, cat: Lateral, desc: "RDP Pass-the-Hash",                          host: ws01.corp.local,   acl: system_only }
+  - { id: LAT-008, cat: Lateral, desc: "Remote Registry Modification",               host: ws01.corp.local,   acl: system_only }
+  - { id: LAT-009, cat: Lateral, desc: "SMB Named Pipe Execution",                   host: file01.corp.local, acl: system_only }
+  - { id: LAT-010, cat: Lateral, desc: "SSH Tunneling (pivot)",                      host: file01.corp.local, acl: system_only }
+  - { id: LAT-011, cat: Lateral, desc: "Certificate-Based Auth Relay",               host: ca01.corp.local,  acl: system_only }
+  - { id: LAT-012, cat: Lateral, desc: "Cross-Forest SID History Hop",               host: dc01.corp.local,  acl: system_only }
+  - { id: LAT-013, cat: Lateral, desc: "Shortcut Trust Abuse",                       host: dc01.corp.local,  acl: system_only }
+  - { id: LAT-014, cat: Lateral, desc: "Realm Trust MIT Kerberos Relay",             host: dc01.corp.local,  acl: system_only }
+  - { id: LAT-015, cat: Lateral, desc: "IPv6 DHCPv6 MitM (mitm6)",                   host: ws01.corp.local,   acl: system_only }
+  - { id: LAT-016, cat: Lateral, desc: "RBCD Chain",                                 host: dc01.corp.local,  acl: system_only }
+  - { id: LAT-017, cat: Lateral, desc: "ACL ForceChangePassword",                    host: dc01.corp.local,  acl: system_only }
+  - { id: LAT-018, cat: Lateral, desc: "ACL Add Self to Group",                      host: dc01.corp.local,  acl: system_only }
+  - { id: LAT-019, cat: Lateral, desc: "ACL Shadow Credentials Write",               host: dc01.corp.local,  acl: system_only }
+  - { id: LAT-020, cat: Lateral, desc: "ACL Owner Change",                           host: dc01.corp.local,  acl: system_only }
+  - { id: LAT-021, cat: Lateral, desc: "ACL DCSync via GenericAll",                  host: dc01.corp.local,  acl: system_only }
+  - { id: LAT-022, cat: Lateral, desc: "ACL WriteSPN Kerberoast",                    host: dc01.corp.local,  acl: system_only }
+  - { id: LAT-023, cat: Lateral, desc: "Cross-Forest TGT Delegation",                host: dc01.corp.local,  acl: system_only }
+  - { id: LAT-024, cat: Lateral, desc: "LDAP Signing Not Required",                  host: dc01.corp.local,  acl: system_only }
+  - { id: LAT-025, cat: Lateral, desc: "WebDAV Redirector Coercion",                 host: ws01.corp.local,   acl: system_only }
+  - { id: LAT-026, cat: Lateral, desc: "DnsAdmins ServerLevelPluginDll",             host: dc01.corp.local,  acl: system_only }
+  - { id: LAT-027, cat: Lateral, desc: "SMB Signing Not Required",                   host: ws01.corp.local,   acl: system_only }
+  - { id: LAT-028, cat: Lateral, desc: "LLMNR/NBT-NS Spoofing",                      host: ws01.corp.local,   acl: system_only }
+  - { id: LAT-029, cat: Lateral, desc: "Coerce via SCF on Share",                    host: ws01.corp.local,   acl: system_only }
+  - { id: LAT-030, cat: Lateral, desc: "Coerce via LNK on Share",                    host: ws01.corp.local,   acl: system_only }
+  - { id: LAT-031, cat: Lateral, desc: "MSSQL Linked Server Hop",                    host: sql01.corp.local,  acl: system_only }
+  - { id: LAT-032, cat: Lateral, desc: "MSSQL xp_cmdshell to OS",                    host: sql01.corp.local,  acl: system_only }
+  - { id: LAT-033, cat: Lateral, desc: "MSSQL Trustworthy DB EoP",                   host: sql01.corp.local,  acl: system_only }
+  - { id: LAT-034, cat: Lateral, desc: "WSUS Update Injection",                      host: dc01.corp.local,  acl: system_only }
+  - { id: LAT-035, cat: Lateral, desc: "Insecure RPC Bind",                          host: file01.corp.local, acl: system_only }
+
+  # ----- Privilege Escalation (PE-001..PE-060) -----
+  - { id: PE-001, cat: PrivilegeEsc, desc: "Potato Family (SeImpersonate)",          host: file01.corp.local, acl: system_only }
+  - { id: PE-002, cat: PrivilegeEsc, desc: "SeAssignPrimaryToken",                   host: file01.corp.local, acl: system_only }
+  - { id: PE-003, cat: PrivilegeEsc, desc: "SeTcbPrivilege",                         host: file01.corp.local, acl: system_only }
+  - { id: PE-004, cat: PrivilegeEsc, desc: "SeLoadDriverPrivilege",                  host: file01.corp.local, acl: system_only }
+  - { id: PE-005, cat: PrivilegeEsc, desc: "SeBackupPrivilege",                      host: file01.corp.local, acl: system_only }
+  - { id: PE-006, cat: PrivilegeEsc, desc: "SeRestorePrivilege",                     host: file01.corp.local, acl: system_only }
+  - { id: PE-007, cat: PrivilegeEsc, desc: "Unquoted Service Path (VulnService)",    host: file01.corp.local, acl: system_only }
+  - { id: PE-008, cat: PrivilegeEsc, desc: "Weak Service DACL",                      host: file01.corp.local, acl: system_only }
+  - { id: PE-009, cat: PrivilegeEsc, desc: "DLL Hijacking",                          host: file01.corp.local, acl: system_only }
+  - { id: PE-010, cat: PrivilegeEsc, desc: "PATH Hijacking (C:\\Tools)",             host: file01.corp.local, acl: system_only }
+  - { id: PE-011, cat: PrivilegeEsc, desc: "AlwaysInstallElevated MSI",              host: ws01.corp.local,   acl: system_only }
+  - { id: PE-012, cat: PrivilegeEsc, desc: "UAC Auto-Elevate Bypass",                host: ws01.corp.local,   acl: system_only }
+  - { id: PE-013, cat: PrivilegeEsc, desc: "Token Kidnapping",                       host: ws01.corp.local,   acl: system_only }
+  - { id: PE-014, cat: PrivilegeEsc, desc: "Named Pipe Impersonation",               host: file01.corp.local, acl: system_only }
+  - { id: PE-015, cat: PrivilegeEsc, desc: "Service Control Manager Overwrite",     host: file01.corp.local, acl: system_only }
+  - { id: PE-016, cat: PrivilegeEsc, desc: "Scheduled Task Hijack (CorpSync)",       host: ws01.corp.local,   acl: system_only }
+  - { id: PE-017, cat: PrivilegeEsc, desc: "COM Object Escalation",                  host: file01.corp.local, acl: system_only }
+  - { id: PE-018, cat: PrivilegeEsc, desc: "Insecure GPO Share (SYSVOL Startup)",    host: dc01.corp.local,   acl: system_only }
+  - { id: PE-019, cat: PrivilegeEsc, desc: "Backup Operators Modify GPO",            host: dc01.corp.local,   acl: system_only }
+  - { id: PE-020, cat: PrivilegeEsc, desc: "SeChangeNotifyPrivilege Abuse",          host: file01.corp.local, acl: system_only }
+  - { id: PE-021, cat: PrivilegeEsc, desc: "SeIncreaseQuotaPrivilege",               host: file01.corp.local, acl: system_only }
+  - { id: PE-022, cat: PrivilegeEsc, desc: "Scheduled Task Race",                    host: ws01.corp.local,   acl: system_only }
+  - { id: PE-023, cat: PrivilegeEsc, desc: "Startup Folder Escalation",              host: ws01.corp.local,   acl: system_only }
+  - { id: PE-024, cat: PrivilegeEsc, desc: "HiveNightmare (SAM read)",               host: ws01.corp.local,   acl: system_only }
+  - { id: PE-025, cat: PrivilegeEsc, desc: "Token Privilege Exploitation",           host: file01.corp.local, acl: system_only }
+  - { id: PE-026, cat: PrivilegeEsc, desc: "SeManageVolumePrivilege",                host: file01.corp.local, acl: system_only }
+  - { id: PE-027, cat: PrivilegeEsc, desc: "SeCreateSymbolicLinkPrivilege",          host: ws01.corp.local,   acl: system_only }
+  - { id: PE-028, cat: PrivilegeEsc, desc: "SeDebugPrivilege Abuse",                 host: file01.corp.local, acl: system_only }
+  - { id: PE-029, cat: PrivilegeEsc, desc: "SeTakeOwnershipPrivilege",               host: file01.corp.local, acl: system_only }
+  - { id: PE-030, cat: PrivilegeEsc, desc: "Service Binary Replacement",             host: file01.corp.local, acl: system_only }
+  - { id: PE-031, cat: PrivilegeEsc, desc: "CVE-2022-30190 Follina",                 host: ws01.corp.local,   acl: system_only }
+  - { id: PE-032, cat: PrivilegeEsc, desc: "CVE-2023-21716 WordPad",                 host: ws01.corp.local,   acl: system_only }
+  - { id: PE-033, cat: PrivilegeEsc, desc: "CVE-2023-28252 CLFS",                    host: ws01.corp.local,   acl: system_only }
+  - { id: PE-034, cat: PrivilegeEsc, desc: "CVE-2023-36745 AFD.sys",                 host: ws01.corp.local,   acl: system_only }
+  - { id: PE-035, cat: PrivilegeEsc, desc: "CVE-2023-29360 TrustedInstaller",        host: ws01.corp.local,   acl: system_only }
+  - { id: PE-036, cat: PrivilegeEsc, desc: "CVE-2024-2067x LPE",                     host: ws01.corp.local,   acl: system_only }
+  - { id: PE-037, cat: PrivilegeEsc, desc: "CVE-2024-26229 CSC",                     host: ws01.corp.local,   acl: system_only }
+  - { id: PE-038, cat: PrivilegeEsc, desc: "CVE-2024-30051 DWM",                     host: ws01.corp.local,   acl: system_only }
+  - { id: PE-039, cat: PrivilegeEsc, desc: "CVE-2024-38063 TCP/IP",                  host: ws01.corp.local,   acl: system_only }
+  - { id: PE-040, cat: PrivilegeEsc, desc: "Recent LPE Placeholder",                 host: ws01.corp.local,   acl: system_only }
+  - { id: PE-041, cat: PrivilegeEsc, desc: "Modifiable Service Folder",              host: file01.corp.local, acl: system_only }
+  - { id: PE-042, cat: PrivilegeEsc, desc: "Modifiable Service Registry",            host: file01.corp.local, acl: system_only }
+  - { id: PE-043, cat: PrivilegeEsc, desc: "StorSvc Abuse",                          host: sql01.corp.local,  acl: system_only }
+  - { id: PE-044, cat: PrivilegeEsc, desc: "CDPSvc Abuse",                           host: sql01.corp.local,  acl: system_only }
+  - { id: PE-045, cat: PrivilegeEsc, desc: "Perfmon Escalation",                     host: ws01.corp.local,   acl: system_only }
+  - { id: PE-046, cat: PrivilegeEsc, desc: "PointPrint LPE (PrintNightmare)",        host: ws01.corp.local,   acl: system_only }
+  - { id: PE-047, cat: PrivilegeEsc, desc: "Misc LSA LPEs",                          host: ws01.corp.local,   acl: system_only }
+  - { id: PE-048, cat: PrivilegeEsc, desc: "S4U2Self EoP",                           host: ws01.corp.local,   acl: system_only }
+  - { id: PE-049, cat: PrivilegeEsc, desc: "Vulnerable Signed Driver",               host: ws01.corp.local,   acl: system_only }
+  - { id: PE-050, cat: PrivilegeEsc, desc: "MSI Repair Escalation",                  host: ws01.corp.local,   acl: system_only }
+  - { id: PE-051, cat: PrivilegeEsc, desc: "AppInstaller / ms-appinstaller Abuse",   host: ws01.corp.local,   acl: system_only }
+  - { id: PE-052, cat: PrivilegeEsc, desc: "Potato via SQL service identity",        host: sql01.corp.local,  acl: system_only }
+  - { id: PE-053, cat: PrivilegeEsc, desc: "CertPotato",                             host: sql01.corp.local,  acl: system_only }
+  - { id: PE-054, cat: PrivilegeEsc, desc: "Local Admin Reuse (NetExec Sweep)",      host: file01.corp.local, acl: system_only }
+  - { id: PE-055, cat: PrivilegeEsc, desc: "KrbRelayUp",                             host: ws01.corp.local,   acl: system_only }
+  - { id: PE-056, cat: PrivilegeEsc, desc: "Writable %windir%\\Installer",           host: ws01.corp.local,   acl: system_only }
+  - { id: PE-057, cat: PrivilegeEsc, desc: "Server Operators -> SYSTEM",             host: dc01.corp.local,   acl: system_only }
+  - { id: PE-058, cat: PrivilegeEsc, desc: "Print Operators -> SYSTEM",              host: dc01.corp.local,   acl: system_only }
+  - { id: PE-059, cat: PrivilegeEsc, desc: "Backup Operators -> NTDS.dit",           host: dc01.corp.local,   acl: system_only }
+  - { id: PE-060, cat: PrivilegeEsc, desc: "Misc Operator Group EoP",                host: ws01.corp.local,   acl: system_only }
+
+  # ----- Persistence (PER-001..PER-037) -----
+  - { id: PER-001, cat: Persistence, desc: "Registry Run Keys",                      host: dc01.corp.local, acl: system_only }
+  - { id: PER-002, cat: Persistence, desc: "IFEO Debugger (sethc/utilman)",          host: dc01.corp.local, acl: system_only }
+  - { id: PER-003, cat: Persistence, desc: "Sticky Keys Hijack",                     host: dc01.corp.local, acl: system_only }
+  - { id: PER-004, cat: Persistence, desc: "Windows Service Installed",              host: dc01.corp.local, acl: system_only }
+  - { id: PER-005, cat: Persistence, desc: "Scheduled Task Persistence",             host: dc01.corp.local, acl: system_only }
+  - { id: PER-006, cat: Persistence, desc: "WMI Event Subscription",                 host: dc01.corp.local, acl: system_only }
+  - { id: PER-007, cat: Persistence, desc: "Netsh Helper DLL",                       host: dc01.corp.local, acl: system_only }
+  - { id: PER-008, cat: Persistence, desc: "COM Hijacking",                          host: dc01.corp.local, acl: system_only }
+  - { id: PER-009, cat: Persistence, desc: "Authentication Package (mimilib)",       host: dc01.corp.local, acl: system_only }
+  - { id: PER-010, cat: Persistence, desc: "Time Provider Hijack (W32Time)",         host: dc01.corp.local, acl: system_only }
+  - { id: PER-011, cat: Persistence, desc: "BootExecute Modification",               host: dc01.corp.local, acl: system_only }
+  - { id: PER-012, cat: Persistence, desc: "AppInit_DLLs",                           host: dc01.corp.local, acl: system_only }
+  - { id: PER-013, cat: Persistence, desc: "Accessibility Tools Backdoor",           host: dc01.corp.local, acl: system_only }
+  - { id: PER-014, cat: Persistence, desc: "RID Hijacking via SAM",                  host: dc01.corp.local, acl: system_only }
+  - { id: PER-015, cat: Persistence, desc: "AdminSDHolder Abuse",                    host: dc01.corp.local, acl: system_only }
+  - { id: PER-016, cat: Persistence, desc: "SID History Injection (persistent)",     host: dc01.corp.local, acl: system_only }
+  - { id: PER-017, cat: Persistence, desc: "DCShadow Persistent",                    host: dc01.corp.local, acl: system_only }
+  - { id: PER-018, cat: Persistence, desc: "Golden Ticket (krbtgt = KrbtgtDVAD2024!)", host: dc01.corp.local, acl: system_only }
+  - { id: PER-019, cat: Persistence, desc: "Silver Ticket Persistent",               host: dc01.corp.local, acl: system_only }
+  - { id: PER-020, cat: Persistence, desc: "Skeleton Key (mimikatz misc::skeleton)", host: dc01.corp.local, acl: system_only }
+  - { id: PER-021, cat: Persistence, desc: "Diamond Ticket Persistent",              host: dc01.corp.local, acl: system_only }
+  - { id: PER-022, cat: Persistence, desc: "Sapphire Ticket Persistent",             host: dc01.corp.local, acl: system_only }
+  - { id: PER-023, cat: Persistence, desc: "Shadow Credentials KeyCredentialLink",   host: dc01.corp.local, acl: system_only }
+  - { id: PER-024, cat: Persistence, desc: "Security Support Provider (SSP)",        host: dc01.corp.local, acl: system_only }
+  - { id: PER-025, cat: Persistence, desc: "DSRM Administrator Backdoor",            host: dc01.corp.local, acl: system_only }
+  - { id: PER-026, cat: Persistence, desc: "Authentication Package Hijack",          host: dc01.corp.local, acl: system_only }
+  - { id: PER-027, cat: Persistence, desc: "Logon Script Hijack",                    host: dc01.corp.local, acl: system_only }
+  - { id: PER-028, cat: Persistence, desc: "gMSA Backdoor",                          host: dc01.corp.local, acl: system_only }
+  - { id: PER-029, cat: Persistence, desc: "RBCD Persistent (FILE01$ -> fakehost$)", host: dc01.corp.local, acl: system_only }
+  - { id: PER-030, cat: Persistence, desc: "ADIDNS Time Bomb (new-fileserver)",      host: dc01.corp.local, acl: system_only }
+  - { id: PER-031, cat: Persistence, desc: "GPO Backdoor (logon script)",            host: dc01.corp.local, acl: system_only }
+  - { id: PER-032, cat: Persistence, desc: "Hidden Account (Deny ListChildren)",     host: dc01.corp.local, acl: system_only }
+  - { id: PER-033, cat: Persistence, desc: "AdminSDHolder GenericAll user2",         host: dc01.corp.local, acl: system_only }
+  - { id: PER-034, cat: Persistence, desc: "GPO ScheduledTasks.xml DDP",             host: dc01.corp.local, acl: system_only }
+  - { id: PER-035, cat: Persistence, desc: "Domain Persistence via Cert (PERSIST1)", host: ca01.corp.local, acl: system_only }
+  - { id: PER-036, cat: Persistence, desc: "Logon Trigger WMI Persistence",          host: dc01.corp.local, acl: system_only }
+  - { id: PER-037, cat: Persistence, desc: "Unconstrained Delegation svc_legacy",    host: dc01.corp.local, acl: system_only }
+
+  # ----- Domain / Forest Compromise (DF-001..DF-040) -----
+  - { id: DF-001, cat: DomainForest, desc: "Golden Ticket Forged",                   host: dc01.corp.local, acl: system_only }
+  - { id: DF-002, cat: DomainForest, desc: "Silver Ticket Forged (CIFS/HOST file01)", host: file01.corp.local, acl: system_only }
+  - { id: DF-003, cat: DomainForest, desc: "DCSync All Hashes",                      host: dc01.corp.local, acl: system_only }
+  - { id: DF-004, cat: DomainForest, desc: "DCShadow Rogue DC",                      host: dc01.corp.local, acl: system_only }
+  - { id: DF-005, cat: DomainForest, desc: "SID-History Injection",                  host: dc01.corp.local, acl: system_only }
+  - { id: DF-006, cat: DomainForest, desc: "Trust Ticket Abuse (inter-realm TGT)",   host: dc01.corp.local, acl: system_only }
+  - { id: DF-007, cat: DomainForest, desc: "ExtraSID Parent-Child (eu.corp.local)",  host: dc01.corp.local, acl: system_only }
+  - { id: DF-008, cat: DomainForest, desc: "SID Filtering Bypass",                   host: dc01.corp.local, acl: system_only }
+  - { id: DF-009, cat: DomainForest, desc: "FSP Hijack (FINANCE\\Administrator)",    host: dc01.corp.local, acl: system_only }
+  - { id: DF-010, cat: DomainForest, desc: "Cross-Forest Kerberoasting",             host: dc01.corp.local, acl: system_only }
+  - { id: DF-011, cat: DomainForest, desc: "ADCS ESC1 Domain Admin",                 host: ca01.corp.local, acl: system_only }
+  - { id: DF-012, cat: DomainForest, desc: "ADCS ESC1 Template SID Inject",          host: ca01.corp.local, acl: system_only }
+  - { id: DF-013, cat: DomainForest, desc: "ADCS ESC2 EKU Any Purpose",              host: ca01.corp.local, acl: system_only }
+  - { id: DF-014, cat: DomainForest, desc: "ADCS ESC3 Agent Template",               host: ca01.corp.local, acl: system_only }
+  - { id: DF-015, cat: DomainForest, desc: "ADCS ESC4 Template ACL",                 host: ca01.corp.local, acl: system_only }
+  - { id: DF-016, cat: DomainForest, desc: "ADCS ESC5 PKI Object ACL",               host: ca01.corp.local, acl: system_only }
+  - { id: DF-017, cat: DomainForest, desc: "ADCS ESC6 EDITF_ATTRIBUTESUBJECTALTNAME2", host: ca01.corp.local, acl: system_only }
+  - { id: DF-018, cat: DomainForest, desc: "ADCS ESC7 Manager/Officer Role",         host: ca01.corp.local, acl: system_only }
+  - { id: DF-019, cat: DomainForest, desc: "ADCS ESC8 Web Enrollment Relay",         host: ca01.corp.local, acl: system_only }
+  - { id: DF-020, cat: DomainForest, desc: "ADCS ESC9 NoSecExt + SpecifiedCert",     host: ca01.corp.local, acl: system_only }
+  - { id: DF-021, cat: DomainForest, desc: "ADCS ESC10 Weak CA ACL",                 host: ca01.corp.local, acl: system_only }
+  - { id: DF-022, cat: DomainForest, desc: "ADCS ESC11 NTLM Relay to ICPR",          host: ca01.corp.local, acl: system_only }
+  - { id: DF-023, cat: DomainForest, desc: "Child -> Enterprise Admin",              host: dc01.corp.local, acl: system_only }
+  - { id: DF-024, cat: DomainForest, desc: "noPac (CVE-2021-42278)",                 host: dc01.corp.local, acl: system_only }
+  - { id: DF-025, cat: DomainForest, desc: "Certifried (CVE-2022-26923)",            host: ca01.corp.local, acl: system_only }
+  - { id: DF-026, cat: DomainForest, desc: "S4U2Self EoP Chain (CVE-2022-33647)",    host: dc01.corp.local, acl: system_only }
+  - { id: DF-027, cat: DomainForest, desc: "SAMAccountName Trust Abuse",             host: dc01.corp.local, acl: system_only }
+  - { id: DF-028, cat: DomainForest, desc: "RODC Abuse (PRP)",                       host: dc01.corp.local, acl: system_only }
+  - { id: DF-029, cat: DomainForest, desc: "GPO Delegation (developer1 DDP)",        host: dc01.corp.local, acl: system_only }
+  - { id: DF-030, cat: DomainForest, desc: "Schema Admin Hijack (helpdesk)",         host: dc01.corp.local, acl: system_only }
+  - { id: DF-031, cat: DomainForest, desc: "ADCS ESC13 OID->Group Link",             host: ca01.corp.local, acl: system_only }
+  - { id: DF-032, cat: DomainForest, desc: "ADCS ESC14 Explicit Cert Mapping",       host: dc01.corp.local, acl: system_only }
+  - { id: DF-033, cat: DomainForest, desc: "ADCS ESC15 EKUwu (CVE-2024-49019)",      host: ca01.corp.local, acl: system_only }
+  - { id: DF-034, cat: DomainForest, desc: "ADCS ESC16 CA-wide NoSecExt",            host: ca01.corp.local, acl: system_only }
+  - { id: DF-035, cat: DomainForest, desc: "ZeroLogon (CVE-2020-1472)",              host: dc01.corp.local, acl: system_only }
+  - { id: DF-036, cat: DomainForest, desc: "MS14-068 Forged PAC",                    host: dc01.corp.local, acl: system_only }
+  - { id: DF-037, cat: DomainForest, desc: "Cross-Forest Trust Ticket (EA SID)",     host: dc01.corp.local, acl: system_only }
+  - { id: DF-038, cat: DomainForest, desc: "Foreign Group Membership Escalation",    host: dc01.corp.local, acl: system_only }
+  - { id: DF-039, cat: DomainForest, desc: "SCCM Site Takeover",                     host: ws01.corp.local, acl: system_only }
+  - { id: DF-040, cat: DomainForest, desc: "Diamond+Sapphire Forest Persistence",    host: dc01.corp.local, acl: system_only }
+
+  # ----- Initial Access (IA-001..IA-050) -----
+  # Maps to docs/02a-initial-access.md. These flags mark "you got a foothold via
+  # technique X" — they live on the host that was the entry-point target.
+  - { id: IA-001, cat: InitialAccess, desc: "Anonymous SMB Null Session",                 host: dc01.corp.local,   acl: everyone }
+  - { id: IA-002, cat: InitialAccess, desc: "RID Cycling Username Harvest",               host: dc01.corp.local,   acl: everyone }
+  - { id: IA-003, cat: InitialAccess, desc: "LDAP Anonymous Bind",                        host: dc01.corp.local,   acl: everyone }
+  - { id: IA-004, cat: InitialAccess, desc: "Kerberos User Enumeration (no-preauth)",     host: dc01.corp.local,   acl: everyone }
+  - { id: IA-005, cat: InitialAccess, desc: "AS-REP Roast (no creds)",                    host: dc01.corp.local,   acl: everyone }
+  - { id: IA-006, cat: InitialAccess, desc: "Password Spray (DVADlab2024!)",              host: dc01.corp.local,   acl: system_only }
+  - { id: IA-007, cat: InitialAccess, desc: "Default Service Account Login",              host: sql01.corp.local,  acl: system_only }
+  - { id: IA-008, cat: InitialAccess, desc: "Anonymous SMB Share Read",                   host: file01.corp.local, acl: everyone }
+  - { id: IA-009, cat: InitialAccess, desc: "Anonymous FTP",                              host: file01.corp.local, acl: everyone }
+  - { id: IA-010, cat: InitialAccess, desc: "Anonymous NFS Mount",                        host: file01.corp.local, acl: everyone }
+  - { id: IA-011, cat: InitialAccess, desc: "MSSQL Mixed-Mode sa Login",                  host: sql01.corp.local,  acl: system_only }
+  - { id: IA-012, cat: InitialAccess, desc: "MSSQL Public Login",                         host: sql01.corp.local,  acl: domain_users }
+  - { id: IA-013, cat: InitialAccess, desc: "WinRM Plaintext (HTTP 5985)",                host: ws01.corp.local,   acl: system_only }
+  - { id: IA-014, cat: InitialAccess, desc: "RDP No-NLA BlueKeep Reachable",              host: ws01.corp.local,   acl: everyone }
+  - { id: IA-015, cat: InitialAccess, desc: "Coerce + Relay (PetitPotam start)",          host: dc01.corp.local,   acl: system_only }
+  - { id: IA-016, cat: InitialAccess, desc: "EternalBlue MS17-010 (SMB1)",                host: file01.corp.local, acl: everyone }
+  - { id: IA-017, cat: InitialAccess, desc: "ZeroLogon Unauth DC RPC",                    host: dc01.corp.local,   acl: everyone }
+  - { id: IA-018, cat: InitialAccess, desc: "PrintNightmare Unauth",                      host: dc01.corp.local,   acl: everyone }
+  - { id: IA-019, cat: InitialAccess, desc: "noPac Pre-auth Path",                        host: dc01.corp.local,   acl: everyone }
+  - { id: IA-020, cat: InitialAccess, desc: "ADCS Web Enrollment Cert Issue",             host: ca01.corp.local,   acl: everyone }
+  - { id: IA-021, cat: InitialAccess, desc: "LDAP Simple Bind Sniff",                     host: dc01.corp.local,   acl: system_only }
+  - { id: IA-022, cat: InitialAccess, desc: "DNS AXFR Unauthenticated",                   host: dc01.corp.local,   acl: everyone }
+  - { id: IA-023, cat: InitialAccess, desc: "SPN-only Account Kerberoast (no auth)",      host: dc01.corp.local,   acl: everyone }
+  - { id: IA-024, cat: InitialAccess, desc: "SMB Share GuestAuthFallback",                host: file01.corp.local, acl: everyone }
+  - { id: IA-025, cat: InitialAccess, desc: "Pre-Windows-2000-Compatible (Anonymous)",    host: dc01.corp.local,   acl: everyone }
+  - { id: IA-026, cat: InitialAccess, desc: "Pre-Created Computer Default Password",      host: dc01.corp.local,   acl: everyone }
+  - { id: IA-027, cat: InitialAccess, desc: "User-as-Password Spray",                     host: dc01.corp.local,   acl: system_only }
+  - { id: IA-028, cat: InitialAccess, desc: "Username==Description Spray",                host: dc01.corp.local,   acl: system_only }
+  - { id: IA-029, cat: InitialAccess, desc: "LLMNR/NBNS Poisoning (Responder)",           host: ws01.corp.local,   acl: system_only }
+  - { id: IA-030, cat: InitialAccess, desc: "mitm6 + ntlmrelayx LDAPS",                   host: ws01.corp.local,   acl: system_only }
+  - { id: IA-031, cat: InitialAccess, desc: "WPAD Hijack",                                host: ws01.corp.local,   acl: system_only }
+  - { id: IA-032, cat: InitialAccess, desc: "Phishing -> macro -> beacon (lab marker)",   host: ws01.corp.local,   acl: domain_users }
+  - { id: IA-033, cat: InitialAccess, desc: "USB Drop / HID Attack (lab marker)",         host: ws01.corp.local,   acl: domain_users }
+  - { id: IA-034, cat: InitialAccess, desc: "SNMP Public Community Walk",                 host: file01.corp.local, acl: everyone }
+  - { id: IA-035, cat: InitialAccess, desc: "SNMP Private Community RW",                  host: file01.corp.local, acl: everyone }
+  - { id: IA-036, cat: InitialAccess, desc: "Telnet Bruteforce (Server 2016 only)",       host: file01.corp.local, acl: everyone }
+  - { id: IA-037, cat: InitialAccess, desc: "IIS WebDAV PROPFIND Enum",                   host: ca01.corp.local,   acl: everyone }
+  - { id: IA-038, cat: InitialAccess, desc: "IIS WebDAV PUT Upload",                      host: ca01.corp.local,   acl: everyone }
+  - { id: IA-039, cat: InitialAccess, desc: "WinRM HTTPS (5986) Plaintext Creds",         host: ws01.corp.local,   acl: system_only }
+  - { id: IA-040, cat: InitialAccess, desc: "DNS AXFR via _msdcs Zone",                   host: dc01.corp.local,   acl: everyone }
+  - { id: IA-041, cat: InitialAccess, desc: "RPC Null-Session Pipe Enum (samr)",          host: dc01.corp.local,   acl: everyone }
+  - { id: IA-042, cat: InitialAccess, desc: "RPC Null-Session Pipe Enum (lsarpc)",        host: dc01.corp.local,   acl: everyone }
+  - { id: IA-043, cat: InitialAccess, desc: "RDP NLA-Off Cred Capture",                   host: ws01.corp.local,   acl: everyone }
+  - { id: IA-044, cat: InitialAccess, desc: "Spooler PrinterBug from Member",             host: file01.corp.local, acl: everyone }
+  - { id: IA-045, cat: InitialAccess, desc: "WebClient WebDAV HTTP Coercion",             host: ws01.corp.local,   acl: everyone }
+  - { id: IA-046, cat: InitialAccess, desc: "ADWS Authenticated Enum (9389)",             host: dc01.corp.local,   acl: domain_users }
+  - { id: IA-047, cat: InitialAccess, desc: "WSD/SSDP Multicast Discovery",               host: ws01.corp.local,   acl: everyone }
+  - { id: IA-048, cat: InitialAccess, desc: "SQL Browser UDP 1434 Broadcast",             host: sql01.corp.local,  acl: everyone }
+  - { id: IA-049, cat: InitialAccess, desc: "SNMP RW Service-Path Hijack",                host: file01.corp.local, acl: everyone }
+  - { id: IA-050, cat: InitialAccess, desc: "NFS Anonymous Write (UID 65534)",            host: file01.corp.local, acl: everyone }
+
+  # ----- Enumeration Surface (ENUM-001..ENUM-080) -----
+  # Maps to docs/02b-enumeration.md. ENUM flags mark "you discovered the surface"
+  # rather than "you exploited it" — most are reachable by any authenticated
+  # domain user (the lab's whole point is to teach what enumeration can find
+  # without admin rights).
+  - { id: ENUM-001, cat: Enumeration, desc: "Domain Naming Context Enum",                 host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-002, cat: Enumeration, desc: "Configuration Naming Context Enum",          host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-003, cat: Enumeration, desc: "Schema Naming Context Enum",                 host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-004, cat: Enumeration, desc: "DomainDnsZones Partition",                   host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-005, cat: Enumeration, desc: "ForestDnsZones Partition",                   host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-006, cat: Enumeration, desc: "Trust Account Enum (TDO)",                   host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-007, cat: Enumeration, desc: "Sites & Subnets Topology",                   host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-008, cat: Enumeration, desc: "ReplLink + ReplLinkFail",                    host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-009, cat: Enumeration, desc: "FSMO Role Holders",                          host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-010, cat: Enumeration, desc: "Tombstone Lifetime",                         host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-011, cat: Enumeration, desc: "BUILTIN Group Membership",                   host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-012, cat: Enumeration, desc: "PrintOperators / ServerOperators Sweep",     host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-013, cat: Enumeration, desc: "Spooler Service Reachable Every Host",       host: file01.corp.local, acl: everyone }
+  - { id: ENUM-014, cat: Enumeration, desc: "WebClient WebDAV Listener",                  host: ws01.corp.local,   acl: everyone }
+  - { id: ENUM-015, cat: Enumeration, desc: "WebDAV-Redirector Feature",                  host: ws01.corp.local,   acl: domain_users }
+  - { id: ENUM-016, cat: Enumeration, desc: "WebClient WebDAV HTTP Coercion Surface",     host: ws01.corp.local,   acl: everyone }
+  - { id: ENUM-017, cat: Enumeration, desc: "Print-Server Feature Install",               host: file01.corp.local, acl: domain_users }
+  - { id: ENUM-018, cat: Enumeration, desc: "Published Printer Object DVAD-PRN",          host: file01.corp.local, acl: domain_users }
+  - { id: ENUM-019, cat: Enumeration, desc: "Printer Driver Path Enum",                   host: file01.corp.local, acl: domain_users }
+  - { id: ENUM-020, cat: Enumeration, desc: "Print Queue Job Enum",                       host: file01.corp.local, acl: domain_users }
+  - { id: ENUM-021, cat: Enumeration, desc: "Anonymous Pipe Enum",                        host: dc01.corp.local,   acl: everyone }
+  - { id: ENUM-022, cat: Enumeration, desc: "Named Pipe netlogon",                        host: dc01.corp.local,   acl: everyone }
+  - { id: ENUM-023, cat: Enumeration, desc: "Named Pipe samr",                            host: dc01.corp.local,   acl: everyone }
+  - { id: ENUM-024, cat: Enumeration, desc: "Named Pipe lsarpc",                          host: dc01.corp.local,   acl: everyone }
+  - { id: ENUM-025, cat: Enumeration, desc: "Named Pipe browser",                         host: dc01.corp.local,   acl: everyone }
+  - { id: ENUM-026, cat: Enumeration, desc: "Named Pipe srvsvc",                          host: dc01.corp.local,   acl: everyone }
+  - { id: ENUM-027, cat: Enumeration, desc: "Named Pipe wkssvc",                          host: dc01.corp.local,   acl: everyone }
+  - { id: ENUM-028, cat: Enumeration, desc: "Named Pipe spoolss",                         host: file01.corp.local, acl: everyone }
+  - { id: ENUM-029, cat: Enumeration, desc: "Named Pipe efsrpc (PetitPotam)",             host: dc01.corp.local,   acl: everyone }
+  - { id: ENUM-030, cat: Enumeration, desc: "Named Pipe netdfs (DFSCoerce)",              host: dc01.corp.local,   acl: everyone }
+  - { id: ENUM-031, cat: Enumeration, desc: "Named Pipe ATSVC (sched task RPC)",          host: ws01.corp.local,   acl: domain_users }
+  - { id: ENUM-032, cat: Enumeration, desc: "Named Pipe svcctl (service control)",        host: ws01.corp.local,   acl: domain_users }
+  - { id: ENUM-033, cat: Enumeration, desc: "Named Pipe winreg (remote registry)",        host: ws01.corp.local,   acl: domain_users }
+  - { id: ENUM-034, cat: Enumeration, desc: "Named Pipe wmi/IWbemServices",               host: ws01.corp.local,   acl: domain_users }
+  - { id: ENUM-035, cat: Enumeration, desc: "RPC Endpoint Mapper (135)",                  host: dc01.corp.local,   acl: everyone }
+  - { id: ENUM-036, cat: Enumeration, desc: "ADWS Endpoint (9389)",                       host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-037, cat: Enumeration, desc: "GC LDAP (3268) Forest Search",               host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-038, cat: Enumeration, desc: "GC LDAPS (3269) Forest Search",              host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-039, cat: Enumeration, desc: "Kerberos KDC (88) Probe",                    host: dc01.corp.local,   acl: everyone }
+  - { id: ENUM-040, cat: Enumeration, desc: "Kpasswd (464)",                              host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-041, cat: Enumeration, desc: "DNS (53) Reachable",                         host: dc01.corp.local,   acl: everyone }
+  - { id: ENUM-042, cat: Enumeration, desc: "NTP (123) on DC",                            host: dc01.corp.local,   acl: everyone }
+  - { id: ENUM-043, cat: Enumeration, desc: "IIS WebDAV PROPFIND on ca01",                host: ca01.corp.local,   acl: everyone }
+  - { id: ENUM-044, cat: Enumeration, desc: "ICPR-RPC Endpoint Enum",                     host: ca01.corp.local,   acl: domain_users }
+  - { id: ENUM-045, cat: Enumeration, desc: "CA Certificate Template Enum",               host: ca01.corp.local,   acl: domain_users }
+  - { id: ENUM-046, cat: Enumeration, desc: "SQL Browser UDP 1434",                       host: sql01.corp.local,  acl: everyone }
+  - { id: ENUM-047, cat: Enumeration, desc: "MSSQL TCP 1433",                             host: sql01.corp.local,  acl: everyone }
+  - { id: ENUM-048, cat: Enumeration, desc: "MSSQL Linked Server List",                   host: sql01.corp.local,  acl: domain_users }
+  - { id: ENUM-049, cat: Enumeration, desc: "SQL DAC (1434/tcp)",                         host: sql01.corp.local,  acl: domain_users }
+  - { id: ENUM-050, cat: Enumeration, desc: "SMB Share Hidden ($) Enum",                  host: file01.corp.local, acl: domain_users }
+  - { id: ENUM-051, cat: Enumeration, desc: "SMB Share NTFS Permissions Enum",            host: file01.corp.local, acl: domain_users }
+  - { id: ENUM-052, cat: Enumeration, desc: "SYSVOL GPP Files",                           host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-053, cat: Enumeration, desc: "NETLOGON Script Hunt",                       host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-054, cat: Enumeration, desc: "SNMP Community String Walk",                 host: file01.corp.local, acl: everyone }
+  - { id: ENUM-055, cat: Enumeration, desc: "NFS Export List (showmount)",                host: file01.corp.local, acl: everyone }
+  - { id: ENUM-056, cat: Enumeration, desc: "FTP Banner + LIST",                          host: file01.corp.local, acl: everyone }
+  - { id: ENUM-057, cat: Enumeration, desc: "WinRM Listener Enum (5985/5986)",            host: ws01.corp.local,   acl: domain_users }
+  - { id: ENUM-058, cat: Enumeration, desc: "RDP NLA State Probe",                        host: ws01.corp.local,   acl: everyone }
+  - { id: ENUM-059, cat: Enumeration, desc: "SMB Signing State Enum",                     host: ws01.corp.local,   acl: everyone }
+  - { id: ENUM-060, cat: Enumeration, desc: "LDAP Signing State Enum",                    host: dc01.corp.local,   acl: everyone }
+  - { id: ENUM-061, cat: Enumeration, desc: "LDAP Channel Binding State",                 host: dc01.corp.local,   acl: everyone }
+  - { id: ENUM-062, cat: Enumeration, desc: "Kerberos Encryption Types Enum",             host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-063, cat: Enumeration, desc: "Pre-Auth-Disabled Users Sweep",              host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-064, cat: Enumeration, desc: "Constrained Delegation Sweep",               host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-065, cat: Enumeration, desc: "Unconstrained Delegation Sweep",             host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-066, cat: Enumeration, desc: "Telnet Service Probe (file01, 2016-only)",   host: file01.corp.local, acl: everyone }
+  - { id: ENUM-067, cat: Enumeration, desc: "RBCD msDS-AllowedToActOnBehalfOfOtherIdentity", host: dc01.corp.local, acl: domain_users }
+  - { id: ENUM-068, cat: Enumeration, desc: "Foreign Security Principal Enum",            host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-069, cat: Enumeration, desc: "MachineAccountQuota Probe",                  host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-070, cat: Enumeration, desc: "ms-DS-AllowedToDelegateTo Sweep",            host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-071, cat: Enumeration, desc: "LAPS msLAPS-PasswordExpirationTime Read",    host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-072, cat: Enumeration, desc: "gMSA msDS-GroupMSAMembership Read",          host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-073, cat: Enumeration, desc: "FunctionDiscovery / SSDP / WSD",             host: ws01.corp.local,   acl: everyone }
+  - { id: ENUM-074, cat: Enumeration, desc: "ADCS PKI Container Enum",                    host: ca01.corp.local,   acl: domain_users }
+  - { id: ENUM-075, cat: Enumeration, desc: "Certificate Authority CDP/AIA URL Enum",     host: ca01.corp.local,   acl: domain_users }
+  - { id: ENUM-076, cat: Enumeration, desc: "GPO Link / WMI Filter Enum",                 host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-077, cat: Enumeration, desc: "Schema Class Discovery (custom OIDs)",       host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-078, cat: Enumeration, desc: "AdminSDHolder ACL Snapshot",                 host: dc01.corp.local,   acl: domain_users }
+  - { id: ENUM-079, cat: Enumeration, desc: "Kerberoastable SPN Sweep (anon)",            host: dc01.corp.local,   acl: everyone }
+  - { id: ENUM-080, cat: Enumeration, desc: "Trust Direction + Transitivity Probe",       host: dc01.corp.local,   acl: domain_users }

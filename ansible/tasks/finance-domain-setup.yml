@@ -1,0 +1,94 @@
+---
+# ==============================================================================
+# DVAD - FINANCE.LOCAL Forest Setup
+# Target: dc01.finance.local
+# ==============================================================================
+
+- name: Set static IP and DNS
+  win_shell: |
+    $adapter = Get-NetAdapter | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
+    $ip = "10.20.0.10"
+    $prefix = 24
+    $gateway = "10.20.0.1"
+    $dns = "10.20.0.10"
+    netsh interface ip set address "$($adapter.Name)" static $ip 255.255.255.0 $gateway 1
+    netsh interface ip set dns "$($adapter.Name)" static $dns
+    Write-Host "IP configured: $ip/24, DNS: $dns"
+
+- name: Set hostname
+  win_hostname:
+    name: "DC01-FIN"
+  register: hostname_result
+
+- name: Install AD DS Features
+  win_feature:
+    name:
+      - AD-Domain-Services
+      - DNS
+      - GPMC
+      - RSAT-ADDS
+      - RSAT-DNS-Server
+      - RSAT-AD-PowerShell
+    state: present
+    include_management_tools: yes
+  register: ad_ds_install
+
+- name: Reboot if required
+  win_reboot:
+  when: ad_ds_install.reboot_required or hostname_result.reboot_required
+
+- name: Wait for host to come back
+  wait_for_connection:
+    delay: 30
+    timeout: 600
+
+- name: Create new forest finance.local
+  win_shell: |
+    Import-Module ADDSDeployment
+    $params = @{
+      DomainName                    = "finance.local"
+      DomainNetbiosName             = "FINANCE"
+      ForestMode                    = "WinThreshold"
+      DomainMode                    = "WinThreshold"
+      DatabasePath                  = "C:\Windows\NTDS"
+      LogPath                       = "C:\Windows\NTDS"
+      SysvolPath                    = "C:\Windows\SYSVOL"
+      SafeModeAdministratorPassword = (ConvertTo-SecureString "DVADlab2024!" -AsPlainText -Force)
+      InstallDns                    = $true
+      CreateDnsDelegation           = $false
+      NoRebootOnCompletion          = $true
+      Force                         = $true
+    }
+    Install-ADDSForest @params
+  register: forest_promotion
+
+- name: Reboot after promotion
+  win_reboot:
+    reboot_timeout: 600
+
+- name: Wait for DC to come back
+  wait_for_connection:
+    delay: 45
+    timeout: 600
+
+- name: Create OUs and users for finance.local
+  win_shell: |
+    Import-Module ActiveDirectory
+    New-ADOrganizationalUnit -Name "Finance" -Path "DC=finance,DC=local" -ProtectedFromAccidentalDeletion $false -ErrorAction SilentlyContinue
+    New-ADOrganizationalUnit -Name "ServiceAccounts" -Path "DC=finance,DC=local" -ProtectedFromAccidentalDeletion $false -ErrorAction SilentlyContinue
+    New-ADOrganizationalUnit -Name "Computers" -Path "DC=finance,DC=local" -ProtectedFromAccidentalDeletion $false -ErrorAction SilentlyContinue
+    New-ADGroup -Name "Finance Admins" -SamAccountName "Finance Admins" -GroupCategory Security -GroupScope Global -Path "OU=Finance,DC=finance,DC=local" -ErrorAction SilentlyContinue
+    $users = @(
+      @{Name="fin_user1"; Password="Fin1234!"; Groups=@("Domain Users")},
+      @{Name="fin_user2"; Password="Fin1234!"; Groups=@("Domain Users")},
+      @{Name="fin_svc"; Password="FinSvc2025!"; Groups=@("Domain Users", "Finance Admins"); SPN="HTTP/finance.local"}
+    )
+    foreach ($u in $users) {
+      $secPwd = ConvertTo-SecureString $u.Password -AsPlainText -Force
+      try {
+        New-ADUser -Name $u.Name -SamAccountName $u.Name -UserPrincipalName "$($u.Name)@finance.local" -AccountPassword $secPwd -Enabled $true -PasswordNeverExpires $true -Path "OU=Users,DC=finance,DC=local" -ErrorAction SilentlyContinue
+      } catch {}
+      if ($u.ContainsKey("SPN")) { Set-ADUser -Identity $u.Name -ServicePrincipalNames @{Add=$u.SPN} -ErrorAction SilentlyContinue }
+      foreach ($g in $u.Groups) { try { Add-ADGroupMember -Identity $g -Members $u.Name } catch {} }
+    }
+  ignore_errors: yes

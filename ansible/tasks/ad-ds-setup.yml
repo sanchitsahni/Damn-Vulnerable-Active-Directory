@@ -1,0 +1,65 @@
+---
+# ==============================================================================
+# DVAD - AD DS Installation and Domain Controller Promotion
+# Target: dc01.corp.local
+# ==============================================================================
+
+- name: Set static IP and DNS
+  win_shell: |
+    $adapter = Get-NetAdapter | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
+    $ip = "10.10.0.10"
+    $prefix = 21
+    $gateway = "10.10.0.1"
+    $dns = "10.10.0.10"
+    netsh interface ip set address "$($adapter.Name)" static $ip 255.255.248.0 $gateway 1
+    netsh interface ip set dns "$($adapter.Name)" static $dns
+    Write-Host "IP configured: $ip/21"
+
+- name: Set hostname
+  win_hostname:
+    name: "dc01"
+  register: hostname_result
+
+- name: Install AD DS Features
+  win_feature:
+    name:
+      - AD-Domain-Services
+      - DNS
+      - GPMC
+      - RSAT-ADDS
+      - RSAT-DNS-Server
+      - RSAT-AD-PowerShell
+    state: present
+    include_management_tools: yes
+  register: ad_ds_install
+
+- name: Reboot if required
+  win_reboot:
+  when: ad_ds_install.reboot_required
+
+- name: Create new forest corp.local
+  win_shell: |
+    Import-Module ADDSDeployment
+
+    $params = @{
+      DomainName                    = "corp.local"
+      DomainNetbiosName             = "CORP"
+      ForestMode                    = "WinThreshold"
+      DomainMode                    = "WinThreshold"
+      DatabasePath                  = "C:\Windows\NTDS"
+      LogPath                       = "C:\Windows\NTDS"
+      SysvolPath                    = "C:\Windows\SYSVOL"
+      SafeModeAdministratorPassword = (ConvertTo-SecureString "DVADlab2024!" -AsPlainText -Force)
+      InstallDns                    = $true
+      CreateDnsDelegation           = $false
+      NoRebootOnCompletion          = $true
+      Force                         = $true
+    }
+
+    Install-ADDSForest @params
+  register: forest_promotion
+  when: forest_promotion is not defined or not forest_promotion.changed
+
+- name: Reboot after promotion
+  win_reboot:
+    reboot_timeout: 600

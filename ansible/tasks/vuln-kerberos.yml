@@ -1,0 +1,71 @@
+---
+# ==============================================================================
+# DVAD - Kerberos Attack Vector Configuration
+# Target: dc01.corp.local
+# ==============================================================================
+
+- name: Set DoesNotRequirePreAuth on svc_nospreauth (AS-REP Roasting)
+  win_shell: |
+    Import-Module ActiveDirectory
+    Set-ADAccountControl -Identity "svc_nospreauth" -DoesNotRequirePreAuth $true
+  ignore_errors: yes
+
+- name: Register SPNs for Kerberoast targets
+  win_shell: |
+    Import-Module ActiveDirectory
+    Set-ADUser -Identity "svc_web" -ServicePrincipalNames @{Add="HTTP/web.corp.local"} -ErrorAction SilentlyContinue
+    Set-ADUser -Identity "svc_sql" -ServicePrincipalNames @{Add="MSSQLSvc/sql01.corp.local:1433"} -ErrorAction SilentlyContinue
+  ignore_errors: yes
+
+- name: Enable AES encryption for rc4-hash downgrade demonstration
+  win_shell: |
+    Import-Module ActiveDirectory
+    $user = Get-ADUser -Filter {name -eq "svc_web"} -Properties msDS-SupportedEncryptionTypes
+    Set-ADUser -Identity "svc_web" -Replace @{"msDS-SupportedEncryptionTypes"=0x1}  # RC4 only
+  ignore_errors: yes
+
+- name: Configure constrained delegation on svc_web
+  win_shell: |
+    Import-Module ActiveDirectory
+    Set-ADAccountControl -Identity "svc_web" -TrustedToAuthForDelegation $true
+    Set-ADUser -Identity "svc_web" -Add @{msDS-AllowedToDelegateTo="HTTP/ws01.corp.local"}
+  ignore_errors: yes
+
+- name: Configure unconstrained delegation on FILE01
+  win_shell: |
+    Import-Module ActiveDirectory
+    $comp = Get-ADComputer -Identity "FILE01"
+    Set-ADAccountControl -Identity $comp -TrustedForDelegation $true
+  ignore_errors: yes
+
+- name: Configure unconstrained delegation on ws01 (attacker can harvest TGTs)
+  win_shell: |
+    Import-Module ActiveDirectory
+    $comp = Get-ADComputer -Identity "WS01"
+    Set-ADAccountControl -Identity $comp -TrustedForDelegation $true
+  ignore_errors: yes
+
+- name: Configure RBCD on sql01 for svc_web
+  win_shell: |
+    Import-Module ActiveDirectory
+    $comp = Get-ADComputer -Identity "SQL01"
+    $svc = Get-ADUser -Identity "svc_web"
+    $sid = New-Object System.Security.Principal.SecurityIdentifier ($svc.SID)
+    $raw = New-Object byte[] $sid.BinaryLength
+    $sid.GetBinaryForm($raw,0)
+    Set-ADComputer -Identity $comp -Replace @{'msDS-AllowedToActOnBehalfOfOtherIdentity'=$raw}
+  ignore_errors: yes
+
+- name: Disable RC4 encryption support on DC (demonstrate AES-only but break things)
+  win_shell: |
+    # For lab purposes, we enable RC4 hash downgrade capability
+    # In real world you would audit this
+    reg add "HKLM\SYSTEM\CurrentControlSet\Control\Lsa\Kerberos\Parameters" /v SupportedEncryptionTypes /t REG_DWORD /d 0x7 /f
+  ignore_errors: yes
+
+- name: Enable printing services for PrinterBug / PetitPotam coercion
+  win_shell: |
+    Install-WindowsFeature Print-Server -Restart:$false
+    Set-Service Spooler -StartupType Automatic
+    Start-Service Spooler
+  ignore_errors: yes

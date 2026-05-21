@@ -1,0 +1,156 @@
+---
+# ==============================================================================
+# DVAD - Phase 4: Privilege Escalation on sql01.corp.local
+# Covers PE-001 (SeImpersonate via SQL Service) + PE-043 (StorSvc), plus the
+# SQL-specific PE / linked-server vectors the attack matrix references.
+# Pre-existing SQL Express install / xp_cmdshell handling left intact.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Original SQL Express install scaffolding (kept for completeness; SQL Express
+# itself is expected to be staged into C:\SQL2019 out-of-band).
+# ------------------------------------------------------------------------------
+- name: Ensure SQL staging dir exists
+  ansible.windows.win_file:
+    path: 'C:\SQL2019'
+    state: directory
+  ignore_errors: yes
+
+- name: PE-001 (SQL) - Install SQL Express with mixed-mode + weak SA (if installer staged)
+  ansible.windows.win_shell: |
+    if (Test-Path "C:\SQL2019\SQLEXPR_x64_ENU.exe") {
+      $sa = "SqlServer2025!"
+      C:\SQL2019\SQLEXPR_x64_ENU.exe /ACTION=Install /QUIET /IACCEPTSQLSERVERLICENSETERMS `
+        /FEATURES=SQLEngine /INSTANCENAME=MSSQLSERVER `
+        /SQLSVCACCOUNT="NT AUTHORITY\SYSTEM" `
+        /SQLSYSADMINACCOUNTS="CORP\SQL Admins" "CORP\Domain Admins" `
+        /SECURITYMODE=SQL /SAPWD=$sa /TCPENABLED=1
+    } else {
+      Write-Host "SQL Express installer not staged. Skipping silent install."
+    }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PE-043: StorSvc abuse - already running as SYSTEM by default; ensure it's
+# auto-start so the LOLBAS trigger is always available.
+# ------------------------------------------------------------------------------
+- name: PE-043 - StorSvc running and auto-start
+  ansible.windows.win_service:
+    name: StorSvc
+    start_mode: auto
+    state: started
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PE-044: CDPSvc - SYSTEM context, auto-start.
+# ------------------------------------------------------------------------------
+- name: PE-044 - CDPSvc running and auto-start
+  ansible.windows.win_service:
+    name: CDPSvc
+    start_mode: auto
+    state: started
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PE-052/PE-053: Potato suite + CertPotato need SeImpersonate on the SQL
+# service token. SQL service runs as SYSTEM here, but we want a low-priv
+# service account variant too. Create a domain account svc_sql_low used as
+# the service identity for a secondary stub.
+#
+# We don't actually re-host MSSQLSERVER on a low-priv account (would break
+# the default install); instead create a separate cmd.exe stub service as
+# svc_sql_low so participants can pivot through it.
+# ------------------------------------------------------------------------------
+- name: PE-052 - Ensure svc_sql_low exists in AD (low-priv service account)
+  ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
+    if (-not (Get-ADUser -Filter "SamAccountName -eq 'svc_sql_low'" -ErrorAction SilentlyContinue)) {
+      New-ADUser -Name "svc_sql_low" -SamAccountName "svc_sql_low" `
+        -AccountPassword (ConvertTo-SecureString "WeakSql2024!" -AsPlainText -Force) `
+        -Enabled $true -PasswordNeverExpires $true `
+        -Path "CN=Users,DC=corp,DC=local" -ErrorAction SilentlyContinue
+    }
+    # Grant SeServiceLogonRight via secedit
+    $tmp = "$env:TEMP\srv.inf"
+    secedit /export /cfg $tmp /areas USER_RIGHTS | Out-Null
+    try {
+      $sid = (New-Object System.Security.Principal.NTAccount("CORP","svc_sql_low")).Translate([System.Security.Principal.SecurityIdentifier]).Value
+      $content = Get-Content $tmp
+      $line = "SeServiceLogonRight = *$sid"
+      if ($content -match "SeServiceLogonRight") {
+        $content = $content -replace "SeServiceLogonRight.*", $line
+      } else { $content += $line }
+      Set-Content -Path $tmp -Value $content
+      secedit /configure /db secedit.sdb /cfg $tmp /areas USER_RIGHTS | Out-Null
+    } catch { Write-Host "SeServiceLogonRight grant: $($_.Exception.Message)" }
+  delegate_to: dc01.corp.local
+  run_once: yes
+  ignore_errors: yes
+
+- name: PE-052 - Stub service as svc_sql_low (SeImpersonate by default)
+  ansible.windows.win_shell: |-
+    $svc = 'SqlAuxStub'
+    if (-not (Get-Service -Name $svc -ErrorAction SilentlyContinue)) {
+      $secPwd = ConvertTo-SecureString 'WeakSql2024!' -AsPlainText -Force
+      $cred = New-Object System.Management.Automation.PSCredential('CORP\svc_sql_low', $secPwd)
+      New-Service -Name $svc `
+        -BinaryPathName 'cmd.exe /c ping -n 999999 127.0.0.1' `
+        -Credential $cred `
+        -StartupType Automatic | Out-Null
+    }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PE-001/PE-014: Loosen DACL on the stub so any domain user can poke the pipe.
+# ------------------------------------------------------------------------------
+- name: PE-001 - Loosen DACL on SqlAuxStub (talk-to-it from any user)
+  ansible.windows.win_shell: |-
+    $sd = 'D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)(A;;CCLCSWLOCRRC;;;WD)'
+    & sc.exe sdset SqlAuxStub $sd | Out-Null
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PE-054: Same local admin password reused (golden image precondition).
+# ------------------------------------------------------------------------------
+- name: PE-054 - Set local Administrator password to lab default
+  ansible.windows.win_user:
+    name: Administrator
+    password: "{{ ansible_password | default('DVADlab2024!') }}"
+    state: present
+    password_never_expires: yes
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# Flag staging on sql01 for the SQL PE path
+# ------------------------------------------------------------------------------
+- name: SQL PE - Flag staging
+  ansible.windows.win_file:
+    path: 'C:\Flags'
+    state: directory
+  ignore_errors: yes
+
+- name: SQL PE - Drop SYSTEM-only flag for xp_cmdshell extraction
+  ansible.windows.win_copy:
+    dest: 'C:\Flags\sql-system.txt'
+    content: "FLAG{PE-001_SQL_XP_CMDSHELL_SYSTEM}"
+  ignore_errors: yes
+
+- name: SQL PE - Lock the flag
+  ansible.windows.win_shell: |
+    icacls "C:\Flags\sql-system.txt" /inheritance:r 2>$null | Out-Null
+    icacls "C:\Flags\sql-system.txt" /grant "NT AUTHORITY\SYSTEM:F" "BUILTIN\Administrators:F" 2>$null | Out-Null
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# CVE-tagged Windows LPEs (PE-031..PE-040, PE-046..PE-048):
+# We are not running unpatched VMs by ISO swap — the gold image is whatever
+# Massgrave activates. Document these as "kernel-level patch state required"
+# and rely on Defender being disabled so signed exploits run. Nothing per-host
+# to wire here.
+# ------------------------------------------------------------------------------
+- name: CVE-tagged PEs - documented (no per-host wiring)
+  debug:
+    msg: |
+      PE-031..PE-040, PE-046..PE-048 depend on Windows patch level.
+      Defender is off across the lab (windows_base + post-install.ps1).
+      Drop the relevant exploit binary on ws01 to chain.

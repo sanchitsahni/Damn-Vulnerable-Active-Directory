@@ -1,0 +1,10 @@
+---
+- name: Activate Windows using Massgrave.dev
+  ansible.windows.win_shell: |
+    $ErrorActionPreference = "Stop"
+    # Suppress first-run IE dialog that might block Invoke-RestMethod
+    $null = New-ItemProperty -Path "HKLM:\\SOFTWARE\\Microsoft\\Internet Explorer\\Main" -Name "DisableFirstRunCustomize" -Value 2 -PropertyType DWord -Force
+    # Download and execute Massgrave activation script
+    Invoke-RestMethod -Uri "https://massgrave.dev/get" | Invoke-Expression
+    Write-Host "Massgrave activation script executed."
+  ignore_errors: yes

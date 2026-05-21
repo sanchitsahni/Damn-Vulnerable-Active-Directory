@@ -1,0 +1,145 @@
+---
+# ==============================================================================
+# DVAD - Phase 3: Lateral Movement Vulnerabilities (LAT-001..LAT-035)
+#
+# Many LAT-* primitives (PsExec, WMI, WinRM, sc.exe, schtasks, RDP, DCOM,
+# remote registry, SMB pipes) are *enabled by default* once Defender + the
+# host firewall are off — both already handled by post-install.ps1 and the
+# windows_base role. This file fills in everything that needs explicit AD
+# or per-host wiring.
+#
+# The blocks below split by target host where it matters.
+# ==============================================================================
+
+# ==============================================================================
+# DC-side: trust attributes, DnsAdmins, ACL chains, SID history precondition
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# LAT-012 / LAT-023 / LAT-034 / LAT-035: External trust attributes
+# Disable SID filtering on incoming external trusts (corp <-> finance,
+# corp <-> root) and allow TGT delegation across the trust boundary.
+# ------------------------------------------------------------------------------
+- name: LAT-012/023 - Disable SID filtering and enable TGT delegation on trusts
+  ansible.windows.win_shell: |
+    $trusts = @("finance.local","root.corp")
+    foreach ($t in $trusts) {
+      try {
+        # Quarantine off => SID filtering disabled
+        netdom trust corp.local /domain:$t /quarantine:no 2>$null | Out-Null
+        # Enable TGT delegation across this incoming trust
+        netdom trust corp.local /domain:$t /enabletgtdelegation:yes 2>$null | Out-Null
+      } catch { Write-Host "Trust $t adjust: $($_.Exception.Message)" }
+    }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# LAT-013 / LAT-014: Realm trust to MIT Kerberos — out of scope (no MIT KDC
+# in this lab). Documented as future expansion.
+# ------------------------------------------------------------------------------
+- name: LAT-013/014 - Documented (no MIT realm in this lab)
+  debug: { msg: "LAT-013/014 require an external MIT KDC; not provisioned." }
+
+# ------------------------------------------------------------------------------
+# LAT-017 / LAT-018 / LAT-019 / LAT-020 / LAT-021 / LAT-022:
+# ACL chains. vuln-acl.yml already covers GenericAll (user1->user2), WriteSPN
+# (helpdesk->svc_web), AddSelf (qa_user->IT Admins), ForceChangePassword
+# (developer1->helpdesk), AdminSDHolder write (user3), and GenericAll on
+# computer accounts (attacker->FILE01/SQL01). Fill in the two missing pieces:
+#   LAT-018: GenericWrite on "IT Admins" group for "Help Desk"
+#   LAT-020: WriteOwner on "Domain Admins" for helpdesk
+# ------------------------------------------------------------------------------
+- name: LAT-018 - Grant Help Desk GenericWrite over IT Admins group
+  ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
+    $src = Get-ADGroup -Identity "Help Desk"
+    $tgt = Get-ADGroup -Identity "IT Admins"
+    $sid = New-Object System.Security.Principal.SecurityIdentifier ($src.SID)
+    $acl = Get-ACL "AD:\$tgt"
+    $rule = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sid, "WriteProperty", "Allow")
+    $acl.AddAccessRule($rule)
+    Set-ACL "AD:\$tgt" $acl
+  ignore_errors: yes
+
+- name: LAT-020 - Grant helpdesk WriteOwner on Domain Admins
+  ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
+    $src = Get-ADUser -Identity "helpdesk"
+    $tgt = Get-ADGroup -Identity "Domain Admins"
+    $sid = New-Object System.Security.Principal.SecurityIdentifier ($src.SID)
+    $acl = Get-ACL "AD:\$tgt"
+    $rule = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sid, "WriteOwner", "Allow")
+    $acl.AddAccessRule($rule)
+    Set-ACL "AD:\$tgt" $acl
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# LAT-031: DnsAdmins -> DLL load on DC. Put a low-priv user in DnsAdmins.
+# ------------------------------------------------------------------------------
+- name: LAT-031 - Add developer1 to DnsAdmins (DLL hijack on DC)
+  ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
+    try { Add-ADGroupMember -Identity "DnsAdmins" -Members "developer1" -ErrorAction Stop } catch { Write-Host "DnsAdmins membership: $($_.Exception.Message)" }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# LAT-034: Foreign Security Principal (cross-forest) into privileged group.
+# Add finance.local Administrator into corp.local "IT Admins". Real cross-forest
+# requires the trust to exist first; we rely on trust-setup.yml ordering.
+# ------------------------------------------------------------------------------
+- name: LAT-034 - Add finance.local Administrator to corp.local IT Admins
+  ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
+    try {
+      # Resolve finance Administrator SID via trust
+      $finAdminSid = (Get-ADUser -Server "finance.local" -Identity "Administrator" -ErrorAction Stop).SID
+      $tgt = Get-ADGroup -Identity "IT Admins"
+      # Add as a foreign principal
+      $fsp = "CN=$($finAdminSid.Value),CN=ForeignSecurityPrincipals,DC=corp,DC=local"
+      Add-ADGroupMember -Identity $tgt -Members $finAdminSid -ErrorAction SilentlyContinue
+      Write-Host "Foreign principal added: $finAdminSid"
+    } catch { Write-Host "Foreign principal add: $($_.Exception.Message)" }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# LAT-035: Golden + SID History — krbtgt hash will be set as part of Phase 5
+# (PER-018). Phase 3 only needs the SID History attribute to be writable on
+# a chosen account; covered by CRED-015 (Configuration NC write to attacker).
+# ------------------------------------------------------------------------------
+- name: LAT-035 - Documented (krbtgt hash + SID-history forging in PER-018)
+  debug: { msg: "LAT-035 precondition (SID History write) covered by CRED-015 + PER-018" }
+
+# ------------------------------------------------------------------------------
+# LAT-015 / LAT-027: IPv6 enabled + no RA Guard (mitm6 precondition).
+# IPv6 is enabled by default on Windows; ensure no policy disables it.
+# ------------------------------------------------------------------------------
+- name: LAT-015/027 - Ensure IPv6 stack is enabled (mitm6 precondition)
+  ansible.windows.win_shell: |
+    # Clear the IPv6 disable bitmask if a previous run set it
+    reg add "HKLM\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters" /v DisabledComponents /t REG_DWORD /d 0 /f | Out-Null
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# Cross-references from this DC-side block (handled elsewhere)
+# ------------------------------------------------------------------------------
+- name: Phase 3 DC-side cross-references
+  debug:
+    msg: |
+      Handled by other tasks / inherent defaults:
+        LAT-001..009 PsExec/WMI/schtasks/sc/DCOM/WinRM/RemoteReg/SMB pipes
+          -> firewall off + Defender off (post-install.ps1 / windows_base)
+        LAT-007 RDP Restricted Admin       -> post-install.ps1
+        LAT-011 ESC1 cert auth             -> adcs_vulns role
+        LAT-016 RBCD chain                 -> CRED-017 + vuln-kerberos.yml
+        LAT-017 ForceChangePassword        -> vuln-acl.yml
+        LAT-019 KeyCredentialLink write    -> CRED-008
+        LAT-021 GenericAll on domain       -> CRED-013/014 (sync_user)
+        LAT-022 WriteSPN                   -> vuln-acl.yml
+        LAT-024 LDAP signing not required  -> REC-006 + CRED-048
+        LAT-025 WebDAV / srvsvc coercion   -> CRED-022/049 (WebClient up)
+        LAT-026 KrbRelayUp                 -> default LSASS pipe + RBCD self-write
+        LAT-028 SMB signing off on ws01    -> ws01-side block below
+        LAT-029 SCShell                    -> firewall off + Service ACL default
+        LAT-030 RDP session hijack         -> SYSTEM context only, no AD config
+        LAT-032 ADIDNS write               -> CRED-026
+        LAT-033 LNK drop on share          -> ws01-side block below

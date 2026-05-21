@@ -1,0 +1,186 @@
+---
+# ==============================================================================
+# DVAD - Phase 4: Privilege Escalation on file01.corp.local
+# Covers PE-001..PE-010, PE-014, PE-017, PE-020, PE-028, PE-029, PE-030,
+# PE-041, PE-042, PE-052, PE-054 surfaces.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# PE-007: Unquoted service path. Path with spaces, no quotes, world-writable
+# parent so an attacker can drop C:\Program.exe.
+# ------------------------------------------------------------------------------
+- name: PE-007 - Stage Vuln Service folder (unquoted path)
+  ansible.windows.win_shell: |-
+    New-Item -ItemType Directory -Path 'C:\Program Files\Vuln Service' -Force | Out-Null
+    Set-Content -Path 'C:\Program Files\Vuln Service\service.exe' -Value '' -Force
+    if (-not (Get-Service -Name VulnService -ErrorAction SilentlyContinue)) {
+      New-Service -Name 'VulnService' `
+        -BinaryPathName 'C:\Program Files\Vuln Service\service.exe' `
+        -StartupType Automatic | Out-Null
+    }
+    & icacls.exe C:\ /grant 'BUILTIN\Users:(OI)(CI)W' 2>$null | Out-Null
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PE-008 / PE-030: Weak service DACL (Everyone can ChangeConfig) + binary
+# replacement opportunity.
+# ------------------------------------------------------------------------------
+- name: PE-008/030 - Weak DACL on VulnService (Everyone WP/DT/LO)
+  ansible.windows.win_shell: |-
+    $sd = 'D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)(A;;RPWPDTLO;;;WD)'
+    & sc.exe sdset VulnService $sd | Out-Null
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PE-009 / PE-010 / PE-041: DLL/PATH hijack + modifiable service folder.
+# C:\Tools is world-writable; ToolService binary lives there; PATH prepended.
+# ------------------------------------------------------------------------------
+- name: PE-009/010/041 - Stage C:\Tools (world-writable PATH dir)
+  ansible.windows.win_shell: |-
+    New-Item -ItemType Directory -Path 'C:\Tools' -Force | Out-Null
+    icacls 'C:\Tools' /grant 'Everyone:(OI)(CI)F' 2>$null | Out-Null
+    Set-Content -Path 'C:\Tools\toolsvc.exe' -Value '' -Force
+    if (-not (Get-Service -Name ToolService -ErrorAction SilentlyContinue)) {
+      New-Service -Name 'ToolService' -BinaryPathName 'C:\Tools\toolsvc.exe' `
+        -StartupType Manual | Out-Null
+    }
+    $p = [Environment]::GetEnvironmentVariable('Path','Machine')
+    if ($p -notlike '*C:\Tools*') {
+      [Environment]::SetEnvironmentVariable('Path', "C:\Tools;$p", 'Machine')
+    }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PE-042: Modifiable Service ImagePath registry key.
+# Grant Users WriteValue on the ToolService registry key.
+# ------------------------------------------------------------------------------
+- name: PE-042 - Grant Users WriteValue on ToolService registry key
+  ansible.windows.win_shell: |
+    $acl = Get-Acl "HKLM:\SYSTEM\CurrentControlSet\Services\ToolService"
+    $rule = New-Object System.Security.AccessControl.RegistryAccessRule(
+      "BUILTIN\Users","SetValue","Allow")
+    $acl.AddAccessRule($rule)
+    Set-Acl "HKLM:\SYSTEM\CurrentControlSet\Services\ToolService" $acl
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PE-001 / PE-014 / PE-017 / PE-043 / PE-052 / PE-053:
+# SeImpersonatePrivilege is held by default by Network Service / LocalService /
+# IIS AppPool / SQL Service identities. To make PE-001 reachable from a domain
+# user, run a service as LocalService that the user can talk to.
+#
+# We create a long-running cmd.exe stub as LocalService listening on a named
+# pipe. Any potato variant can then impersonate via that token.
+# ------------------------------------------------------------------------------
+- name: PE-001/014/017 - Create LocalService named-pipe stub
+  ansible.windows.win_shell: |-
+    $svc = 'PipeBroker'
+    if (-not (Get-Service -Name $svc -ErrorAction SilentlyContinue)) {
+      New-Service -Name $svc `
+        -BinaryPathName 'cmd.exe /c ping -n 999999 127.0.0.1' `
+        -StartupType Automatic | Out-Null
+    }
+    $sd = 'D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)(A;;CCLCSWLOCRRC;;;WD)'
+    & sc.exe sdset $svc $sd | Out-Null
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PE-002 / PE-003 / PE-004 / PE-005 / PE-006 / PE-020 / PE-028 / PE-029:
+# Grant unusual privileges to a low-priv user (developer1) via secedit.
+# Privileges granted: SeAssignPrimaryToken, SeTcb, SeLoadDriver, SeBackup,
+# SeRestore, SeDebug, SeTakeOwnership. SeChangeNotify is on by default.
+# ------------------------------------------------------------------------------
+- name: PE-002..029 - Grant privilege bouquet to developer1 via secedit
+  ansible.windows.win_shell: |
+    $tmp = "$env:TEMP\privs.inf"
+    secedit /export /cfg $tmp /areas USER_RIGHTS | Out-Null
+    try {
+      $sid = (New-Object System.Security.Principal.NTAccount("CORP","developer1")).Translate([System.Security.Principal.SecurityIdentifier]).Value
+    } catch {
+      Write-Host "Cannot resolve CORP\developer1 - skip"; return
+    }
+    $privs = @(
+      "SeAssignPrimaryTokenPrivilege",
+      "SeTcbPrivilege",
+      "SeLoadDriverPrivilege",
+      "SeBackupPrivilege",
+      "SeRestorePrivilege",
+      "SeDebugPrivilege",
+      "SeTakeOwnershipPrivilege"
+    )
+    $content = Get-Content $tmp
+    foreach ($p in $privs) {
+      $line = "$p = *$sid"
+      if ($content -match "^\s*$p\s*=") {
+        $content = $content -replace "^\s*$p\s*=.*", $line
+      } else {
+        $content += $line
+      }
+    }
+    Set-Content -Path $tmp -Value $content
+    secedit /configure /db secedit.sdb /cfg $tmp /areas USER_RIGHTS | Out-Null
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PE-016 / PE-022: Writable scheduled task on file01 (mirror of ws01).
+# ------------------------------------------------------------------------------
+- name: PE-016/022 - Writable scheduled task on file01
+  ansible.windows.win_shell: |
+    New-Item -ItemType Directory -Path "C:\VulnServices" -Force | Out-Null
+    Set-Content -Path "C:\VulnServices\updater.bat" -Value "@echo off`r`nexit /b 0" -Force
+    schtasks /Create /TN "VulnUpdater" /TR "C:\VulnServices\updater.bat" /SC ONSTART /RU SYSTEM /F | Out-Null
+    icacls "C:\VulnServices" /grant "Everyone:(OI)(CI)F" 2>$null | Out-Null
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PE-011: AlwaysInstallElevated on file01 too
+# ------------------------------------------------------------------------------
+- name: PE-011 - AlwaysInstallElevated HKLM
+  ansible.windows.win_regedit:
+    path: 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Installer'
+    name: AlwaysInstallElevated
+    data: 1
+    type: dword
+  ignore_errors: yes
+
+- name: PE-011 - AlwaysInstallElevated HKCU
+  ansible.windows.win_regedit:
+    path: 'HKCU:\SOFTWARE\Policies\Microsoft\Windows\Installer'
+    name: AlwaysInstallElevated
+    data: 1
+    type: dword
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PE-054: NetExec local-auth admin sweep — depends on the same local admin
+# password being baked into the gold image. Set a known local Administrator
+# password matching the lab password.
+# ------------------------------------------------------------------------------
+- name: PE-054 - Set local Administrator password to lab default
+  ansible.windows.win_user:
+    name: Administrator
+    password: "{{ ansible_password | default('DVADlab2024!') }}"
+    state: present
+    password_never_expires: yes
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# Flag staging on file01 for SeBackup / SeRestore reads
+# ------------------------------------------------------------------------------
+- name: PE-005/006 - Flag staging dir on file01
+  ansible.windows.win_file:
+    path: 'C:\Flags'
+    state: directory
+  ignore_errors: yes
+
+- name: PE-005/006 - Drop admin-only flag on file01
+  ansible.windows.win_copy:
+    dest: 'C:\Flags\admin-flag.txt'
+    content: "FLAG{PE-005_SEBACKUP_FILE01}"
+  ignore_errors: yes
+
+- name: PE-005/006 - Lock down flag (SeBackup bypass is the path)
+  ansible.windows.win_shell: |
+    icacls "C:\Flags\admin-flag.txt" /inheritance:r 2>$null | Out-Null
+    icacls "C:\Flags\admin-flag.txt" /grant "NT AUTHORITY\SYSTEM:F" "BUILTIN\Administrators:F" 2>$null | Out-Null
+  ignore_errors: yes

@@ -1,0 +1,59 @@
+---
+# ==============================================================================
+# DVAD - Cross-Forest Trust Configuration
+# Target: dc01.corp.local
+# ==============================================================================
+
+- name: Create external trust CORP <-> FINANCE
+  win_shell: |
+    Import-Module ActiveDirectory
+    $securePassword = ConvertTo-SecureString "DVADlab2024!" -AsPlainText -Force
+    $cred = New-Object System.Management.Automation.PSCredential("FINANCE\Administrator", $securePassword)
+
+    # Create one-way outbound trust from CORP to FINANCE (or two-way)
+    try {
+        $params = @{
+            Name                   = "finance.local"
+            Target                 = "finance.local"
+            SourceDC               = "dc01.corp.local"
+            Credential             = $cred
+            Direction              = "BiDirectional"
+            TrustType              = "External"
+            EditAfterCreate        = $false
+            Force                  = $true
+        }
+        New-ADTrust @params
+        Write-Host "Trust CORP <-> FINANCE created."
+    } catch {
+        Write-Host "Trust creation result: $($_.Exception.Message)"
+    }
+  ignore_errors: yes
+
+- name: Create tree-root trust CORP <-> ROOT
+  win_shell: |
+    Import-Module ActiveDirectory
+    $securePassword = ConvertTo-SecureString "DVADlab2024!" -AsPlainText -Force
+    $cred = New-Object System.Management.Automation.PSCredential("ROOT\Administrator", $securePassword)
+
+    try {
+        $params = @{
+            Name                   = "root.corp"
+            Target                 = "root.corp"
+            SourceDC               = "dc01.corp.local"
+            Credential             = $cred
+            Direction              = "BiDirectional"
+            TrustType              = "Forest"
+            EditAfterCreate        = $false
+            Force                  = $true
+        }
+        New-ADTrust @params
+        Write-Host "Tree-root trust CORP <-> ROOT created."
+    } catch {
+        Write-Host "Trust creation result: $($_.Exception.Message)"
+    }
+  ignore_errors: yes
+
+- name: Verify trusts
+  win_shell: |
+    nltest /domain_trusts /all
+  ignore_errors: yes
