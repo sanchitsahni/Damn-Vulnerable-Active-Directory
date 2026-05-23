@@ -4,11 +4,8 @@
     name:
       - RSAT
       - RSAT-AD-PowerShell
-      - RSAT-ADCS
       - RSAT-DNS-Server
-      - RSAT-ADCS-Mgmt
       - PowerShell
-      - PowerShell-ISE
       - Net-Framework-45-Core
     state: present
     include_management_tools: yes
@@ -27,29 +24,7 @@
     Set-Item -Path WSMan:\localhost\Service\Auth\Negotiate -Value $true
     Set-Item -Path WSMan:\localhost\Service\Auth\CredSSP -Value $true
 
-- name: Disable Windows Defender real-time protection
-  ansible.windows.win_shell: |
-    Set-MpPreference -DisableRealtimeMonitoring $true
-    Set-MpPreference -DisableBehaviorMonitoring $true
-    Set-MpPreference -DisableIOAVProtection $true
-    Set-MpPreference -DisableIntrusionPreventionSystem $true
-    Set-MpPreference -DisableScriptScanning $true
-    Set-MpPreference -DisableBlockAtFirstSeen $true
-    New-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender" -Name "DisableAntiSpyware" -Value 1 -PropertyType DWord -Force
-  ignore_errors: yes
 
-- name: Disable IE Enhanced Security Configuration
-  ansible.windows.win_shell: |
-    Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A7-37EF-4b3f-8CFC-4F3A74704073}" -Name "IsInstalled" -Value 0
-    Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A8-37EF-4b3f-8CFC-4F3A74704073}" -Name "IsInstalled" -Value 0
-
-- name: Configure power settings (never sleep)
-  ansible.windows.win_shell: |
-    powercfg /change monitor-timeout-ac 0
-    powercfg /change disk-timeout-ac 0
-    powercfg /change standby-timeout-ac 0
-    powercfg /change hibernate-timeout-ac 0
-    powercfg /h off
 
 - name: Set timezone to UTC
   ansible.windows.win_timezone:

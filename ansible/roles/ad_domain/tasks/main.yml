@@ -14,6 +14,11 @@
 
 - name: Promote CORP forest
   ansible.windows.win_shell: |
+    $role = (Get-CimInstance -ClassName Win32_ComputerSystem).DomainRole
+    if ($role -in 4, 5) {
+        Write-Host "Already a Domain Controller. Skipping."
+        exit 0
+    }
     Import-Module ADDSDeployment
     $securePassword = ConvertTo-SecureString "{{ domain_admin_password }}" -AsPlainText -Force
     Install-ADDSForest `
@@ -36,6 +41,11 @@
 
 - name: Promote EU child domain
   ansible.windows.win_shell: |
+    $role = (Get-CimInstance -ClassName Win32_ComputerSystem).DomainRole
+    if ($role -in 4, 5) {
+        Write-Host "Already a Domain Controller. Skipping."
+        exit 0
+    }
     Import-Module ADDSDeployment
     $securePassword = ConvertTo-SecureString "{{ domain_admin_password }}" -AsPlainText -Force
     Install-ADDSDomain `
@@ -58,10 +68,15 @@
 
 - name: Promote FINANCE forest
   ansible.windows.win_shell: |
+    $role = (Get-CimInstance -ClassName Win32_ComputerSystem).DomainRole
+    if ($role -in 4, 5) {
+        Write-Host "Already a Domain Controller. Skipping."
+        exit 0
+    }
     Import-Module ADDSDeployment
     $securePassword = ConvertTo-SecureString "{{ domain_admin_password }}" -AsPlainText -Force
     Install-ADDSForest `
-      -DomainName "{{ finance_domain }}" `
+      -DomainName "finance.local" `
       -DomainNetbiosName "FINANCE" `
       -ForestMode "WinThreshold" `
       -DomainMode "WinThreshold" `
@@ -74,10 +89,15 @@
 
 - name: Promote ROOT forest
   ansible.windows.win_shell: |
+    $role = (Get-CimInstance -ClassName Win32_ComputerSystem).DomainRole
+    if ($role -in 4, 5) {
+        Write-Host "Already a Domain Controller. Skipping."
+        exit 0
+    }
     Import-Module ADDSDeployment
     $securePassword = ConvertTo-SecureString "{{ domain_admin_password }}" -AsPlainText -Force
     Install-ADDSForest `
-      -DomainName "{{ forest_root }}" `
+      -DomainName "root.corp" `
       -DomainNetbiosName "ROOT" `
       -ForestMode "WinThreshold" `
       -DomainMode "WinThreshold" `

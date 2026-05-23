@@ -82,6 +82,7 @@ bind-interfaces
 no-resolv
 domain-needed
 bogus-priv
+conf-file=/tmp/dvad-dnsmasq/dvad-static.conf
 
 # CTF Network (corp.local + eu.corp.local)
 interface=dvad-ctf
@@ -124,6 +125,7 @@ DNSMASQ_EOF
 # Reserve static IPs in dnsmasq
 add_static_leases() {
     local LEASE_FILE="/tmp/dvad-dnsmasq/dvad-static.conf"
+    mkdir -p "/tmp/dvad-dnsmasq"
 
     cat > "$LEASE_FILE" << 'STATIC_EOF'
 # Static DHCP Leases for DVAD Lab
@@ -157,8 +159,8 @@ create_all_networks() {
         sudo ip link set dvad-nat up 2>/dev/null || true
     fi
 
-    setup_dnsmasq
     add_static_leases
+    setup_dnsmasq
 
     # Show bridge status
     echo ""

@@ -38,16 +38,16 @@ declare -A VM_DEFS
 
 VM_DEFS=(
     # corp.local domain VMs
-    ["dc01-corp"]="dc01.corp.local|52:54:00:00:01:01|3072|40|2|1|dvad-ctf|virtio"
-    ["dc01-eu"]="dc01.eu.corp.local|52:54:00:00:01:02|2048|25|1|2|dvad-ctf|virtio"
-    ["ca01"]="ca01.corp.local|52:54:00:00:01:03|2048|25|1|3|dvad-ctf|virtio"
-    ["file01"]="file01.corp.local|52:54:00:00:01:04|1536|20|1|4|dvad-ctf|virtio"
-    ["sql01"]="sql01.corp.local|52:54:00:00:01:05|2048|25|1|5|dvad-ctf|virtio"
-    ["ws01"]="ws01.corp.local|52:54:00:00:01:06|3072|30|2|6|dvad-ctf|virtio"
+    ["dc01-corp"]="dc01.corp.local|52:54:00:00:01:01|2048|40|2|1|dvad-ctf|e1000e"
+    ["dc01-eu"]="dc01.eu.corp.local|52:54:00:00:01:02|2048|25|2|2|dvad-ctf|e1000e"
+    ["ca01"]="ca01.corp.local|52:54:00:00:01:03|2048|25|2|3|dvad-ctf|e1000e"
+    ["file01"]="file01.corp.local|52:54:00:00:01:04|1536|20|2|4|dvad-ctf|e1000e"
+    ["sql01"]="sql01.corp.local|52:54:00:00:01:05|2048|25|2|5|dvad-ctf|e1000e"
+    ["ws01"]="ws01.corp.local|52:54:00:00:01:06|1024|30|2|6|dvad-ctf|e1000e"
     # finance.local domain
-    ["dc01-fin"]="dc01.finance.local|52:54:00:00:02:01|2048|25|1|7|dvad-finance|virtio"
+    ["dc01-fin"]="dc01.finance.local|52:54:00:00:02:01|2048|25|2|7|dvad-finance|e1000e"
     # root.corp domain
-    ["dc01-root"]="dc01.root.corp|52:54:00:00:03:01|2048|25|1|8|dvad-root|virtio"
+    ["dc01-root"]="dc01.root.corp|52:54:00:00:03:01|2048|25|2|8|dvad-root|e1000e"
 )
 
 # Scale per-VM RAM/CPU to fit a target budget. Called once before launch.
@@ -94,93 +94,10 @@ generate_autounattend() {
     local output_dir="${AUTOUNATTEND_DIR}/${vm_name}"
     mkdir -p "$output_dir"
 
-    local admin_password="DVADlab2024!"
-
-    # Generate autounattend.xml for unattended Windows Server Core installation
-    cat > "${output_dir}/autounattend.xml" << AUTOXML
+    local admin_password="DVADlab2024!"    # Generate unattend.xml for OOBE configuration of the pre-installed VHD
+    cat > "${output_dir}/unattend.xml" << AUTOXML
 <?xml version="1.0" encoding="utf-8"?>
-<unattend xmlns="urn:schemas-microsoft-com:unattend">
-    <settings pass="windowsPE">
-        <component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
-            <SetupUILanguage>
-                <UILanguage>en-US</UILanguage>
-            </SetupUILanguage>
-            <InputLocale>en-US</InputLocale>
-            <SystemLocale>en-US</SystemLocale>
-            <UILanguage>en-US</UILanguage>
-            <UserLocale>en-US</UserLocale>
-        </component>
-        <component name="Microsoft-Windows-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
-            <DiskConfiguration>
-                <Disk wcm:action="add">
-                    <CreatePartitions>
-                        <CreatePartition wcm:action="add">
-                            <Order>1</Order>
-                            <Size>500</Size>
-                            <Type>Primary</Type>
-                        </CreatePartition>
-                        <CreatePartition wcm:action="add">
-                            <Extend>true</Extend>
-                            <Order>2</Order>
-                            <Type>Primary</Type>
-                        </CreatePartition>
-                    </CreatePartitions>
-                    <ModifyPartitions>
-                        <ModifyPartition wcm:action="add">
-                            <Active>true</Active>
-                            <Format>NTFS</Format>
-                            <Label>System</Label>
-                            <Order>1</Order>
-                            <PartitionID>1</PartitionID>
-                        </ModifyPartition>
-                        <ModifyPartition wcm:action="add">
-                            <Format>NTFS</Format>
-                            <Label>Windows</Label>
-                            <Letter>C</Letter>
-                            <Order>2</Order>
-                            <PartitionID>2</PartitionID>
-                        </ModifyPartition>
-                    </ModifyPartitions>
-                    <DiskID>0</DiskID>
-                    <WillWipeDisk>true</WillWipeDisk>
-                </Disk>
-            </DiskConfiguration>
-            <ImageInstall>
-                <OSImage>
-                    <InstallTo>
-                        <DiskID>0</DiskID>
-                        <PartitionID>2</PartitionID>
-                    </InstallTo>
-                    <InstallToAvailablePartition>false</InstallToAvailablePartition>
-                </OSImage>
-            </ImageInstall>
-            <UserData>
-                <AcceptEula>true</AcceptEula>
-                <FullName>DVAD Admin</FullName>
-                <Organization>DVAD Lab</Organization>
-            </UserData>
-        </component>
-    </settings>
-    <settings pass="offlineServicing">
-        <component name="Microsoft-Windows-PnpCustomizationsNonWinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
-            <DriverPaths>
-                <PathAndCredentials wcm:action="add" wcm:keyValue="1">
-                    <Path>E:\NetKVM\w10\amd64</Path>
-                </PathAndCredentials>
-                <PathAndCredentials wcm:action="add" wcm:keyValue="2">
-                    <Path>E:\viostor\w10\amd64</Path>
-                </PathAndCredentials>
-                <PathAndCredentials wcm:action="add" wcm:keyValue="3">
-                    <Path>E:\Balloon\w10\amd64</Path>
-                </PathAndCredentials>
-            </DriverPaths>
-        </component>
-    </settings>
-    <settings pass="generalize">
-        <component name="Microsoft-Windows-Security-SPP" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
-            <SkipRearm>1</SkipRearm>
-        </component>
-    </settings>
+<unattend xmlns="urn:schemas-microsoft-com:unattend" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
     <settings pass="specialize">
         <component name="Microsoft-Windows-International-Core" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
             <InputLocale>en-US</InputLocale>
@@ -190,7 +107,6 @@ generate_autounattend() {
         </component>
         <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
             <ComputerName>${hostname%%.*}</ComputerName>
-            <ProductKey>WX4NM-KYWYW-QJJR4-XV3QB-6VM33</ProductKey>
             <TimeZone>Pacific Standard Time</TimeZone>
         </component>
         <component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
@@ -230,7 +146,7 @@ generate_autounattend() {
             <FirstLogonCommands>
                 <SynchronousCommand wcm:action="add">
                     <Order>1</Order>
-                    <CommandLine>powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Setup\Scripts\post-install.ps1</CommandLine>
+                    <CommandLine>cmd.exe /c "for %i in (C D E F G H I) do if exist %i:\post-install.ps1 powershell.exe -NoProfile -ExecutionPolicy Bypass -File %i:\post-install.ps1"</CommandLine>
                     <Description>DVAD Post-Install Script</Description>
                 </SynchronousCommand>
             </FirstLogonCommands>
@@ -308,34 +224,8 @@ Stop-Transcript
 New-Item -ItemType File -Path "C:\dvad-ready.txt" -Force
 PSCRIPT
 
-    # Create ISO with autounattend and post-install scripts
-    local iso_output="${output_dir}/autounattend-${vm_name}.iso"
-    mkdir -p "/tmp/dvad-iso/${vm_name}"
-
-    # Ensure autounattend.xml is at root of ISO
-    cp "${output_dir}/autounattend.xml" "/tmp/dvad-iso/${vm_name}/autounattend.xml"
-
-    # Add scripts directory for post-install
-    mkdir -p "/tmp/dvad-iso/${vm_name}/scripts"
-    cp "${output_dir}/post-install.ps1" "/tmp/dvad-iso/${vm_name}/scripts/post-install.ps1"
-
-    # Create the ISO
-    if command -v genisoimage &>/dev/null; then
-        genisoimage -quiet -udf -J -r -l -o "$iso_output" "/tmp/dvad-iso/${vm_name}/" 2>/dev/null || \
-        genisoimage -udf -J -r -l -o "$iso_output" "/tmp/dvad-iso/${vm_name}/"
-    elif command -v mkisofs &>/dev/null; then
-        mkisofs -quiet -udf -J -r -l -o "$iso_output" "/tmp/dvad-iso/${vm_name}/"
-    elif command -v xorrisofs &>/dev/null; then
-        xorrisofs -quiet -udf -J -r -l -o "$iso_output" "/tmp/dvad-iso/${vm_name}/"
-    else
-        warn "No ISO creation tool found. Autounattend will not be injected for $vm_name"
-        rm -rf "/tmp/dvad-iso/${vm_name}"
-        echo ""
-        return 1
-    fi
-
-    rm -rf "/tmp/dvad-iso/${vm_name}"
-    echo "$iso_output"
+    # Return the directory path to be used as vvfat
+    echo "$output_dir"
 }
 
 # ==============================================================================
@@ -345,6 +235,7 @@ create_disk() {
     local vm_name="$1"
     local size_gb="$2"
     local disk_path="${VM_DIR}/${vm_name}.qcow2"
+    local base_qcow2="${MEDIA_DIR}/win2k25.qcow2"
 
     if [ -f "$disk_path" ]; then
         info "Disk exists for $vm_name: $(du -h "$disk_path" | cut -f1)"
@@ -352,8 +243,8 @@ create_disk() {
     fi
 
     mkdir -p "$VM_DIR"
-    log "Creating disk for $vm_name (${size_gb}GB)..."
-    qemu-img create -f qcow2 "$disk_path" "${size_gb}G"
+    log "Creating linked clone for $vm_name (${size_gb}GB)..."
+    qemu-img create -f qcow2 -b "$base_qcow2" -F qcow2 "$disk_path" "${size_gb}G"
 }
 
 # ==============================================================================
@@ -425,30 +316,31 @@ launch_vm() {
         -cpu host
         -smp "cpus=${vcpus}"
         -m "${ram_mb}M"
-        # Boot disk
+        # Boot disk (using IDE native for VHD compatibility)
         -drive "file=${disk_path},if=none,id=drive0,format=qcow2,cache=writeback"
-        -device "virtio-blk-pci,drive=drive0,bootindex=1"
-        # Windows ISO (CD-ROM)
-        -drive "file=${ISO_FILE},if=none,id=cdrom0,media=cdrom"
-        -device "ide-cd,drive=cdrom0,bus=ide.0,bootindex=2"
+        -device "ide-hd,drive=drive0,bus=ide.0,bootindex=1"
         # VirtIO drivers ISO
         -drive "file=${VIRTIO_ISO},if=none,id=cdrom1,media=cdrom"
         -device "ide-cd,drive=cdrom1,bus=ide.1,bootindex=3"
     )
 
-    # Autounattend ISO if available
-    if [ -f "$auto_iso" ]; then
+    # Autounattend directory if available
+    if [ -d "$auto_iso" ]; then
         QEMU_CMD+=(
-            -device qemu-xhci,id=usb_controller
-            -drive "file=${auto_iso},if=none,id=usb_auto,format=raw"
-            -device "usb-storage,bus=usb_controller.0,drive=usb_auto,removable=on"
+            -drive "file=fat:ro:${auto_iso},if=none,id=auto_drive,format=raw"
+            -device "ide-hd,drive=auto_drive,bus=ide.2"
         )
+    fi
+
+    local nic_device="${nic_model}"
+    if [ "$nic_model" = "virtio" ]; then
+        nic_device="virtio-net-pci"
     fi
 
     QEMU_CMD+=(
         # Network
         -netdev "bridge,id=net0,br=${bridge}"
-        -device "${nic_model}-net-pci,netdev=net0,mac=${mac}"
+        -device "${nic_device},netdev=net0,mac=${mac}"
         # Display & VNC (varies by profile)
         "${DISPLAY_ARGS[@]}"
         # Devices

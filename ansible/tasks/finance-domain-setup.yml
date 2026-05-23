@@ -6,14 +6,28 @@
 
 - name: Set static IP and DNS
   win_shell: |
+    Start-Sleep -Seconds 5
     $adapter = Get-NetAdapter | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
     $ip = "10.20.0.10"
     $prefix = 24
     $gateway = "10.20.0.1"
-    $dns = "10.20.0.10"
+    $dns = "10.10.0.10"
     netsh interface ip set address "$($adapter.Name)" static $ip 255.255.255.0 $gateway 1
     netsh interface ip set dns "$($adapter.Name)" static $dns
     Write-Host "IP configured: $ip/24, DNS: $dns"
+  async: 20
+  poll: 0
+
+- name: Wait for background IP change to drop the network adapter
+  pause:
+    seconds: 15
+
+- name: Wait for network to stabilize
+  wait_for_connection:
+    timeout: 60
+
+- name: Reset WinRM connection to clear stale sockets
+  meta: reset_connection
 
 - name: Set hostname
   win_hostname:
@@ -33,7 +47,7 @@
     include_management_tools: yes
   register: ad_ds_install
 
-- name: Reboot if required
+- name: Reboot if required before promotion
   win_reboot:
   when: ad_ds_install.reboot_required or hostname_result.reboot_required
 
@@ -42,9 +56,24 @@
     delay: 30
     timeout: 600
 
+- name: Wait for CORP.LOCAL AD DS to be fully online and responsive
+  win_shell: |
+    Write-Host "Waiting for 10.10.0.10 to open LDAP port..."
+    while ($true) {
+        $tcp = Test-NetConnection -ComputerName 10.10.0.10 -Port 389 -WarningAction SilentlyContinue
+        if ($tcp.TcpTestSucceeded) {
+            Write-Host "LDAP is UP! Giving AD DS 30 extra seconds to stabilize..."
+            Start-Sleep -Seconds 30
+            break
+        }
+        Start-Sleep -Seconds 15
+    }
+  timeout: 900
+
 - name: Create new forest finance.local
   win_shell: |
     Import-Module ADDSDeployment
+
     $params = @{
       DomainName                    = "finance.local"
       DomainNetbiosName             = "FINANCE"
@@ -56,20 +85,23 @@
       SafeModeAdministratorPassword = (ConvertTo-SecureString "DVADlab2024!" -AsPlainText -Force)
       InstallDns                    = $true
       CreateDnsDelegation           = $false
-      NoRebootOnCompletion          = $true
+      NoRebootOnCompletion          = $false
       Force                         = $true
     }
+
     Install-ADDSForest @params
   register: forest_promotion
+  async: 1800
+  poll: 0
 
-- name: Reboot after promotion
-  win_reboot:
-    reboot_timeout: 600
+- name: Dynamically switch to Domain Admin credentials while rebooting
+  set_fact:
+    ansible_user: "Administrator@finance.local"
 
-- name: Wait for DC to come back
+- name: Wait for finance DC to reboot and WinRM to come back up with new credentials
   wait_for_connection:
-    delay: 45
-    timeout: 600
+    delay: 60
+    timeout: 900
 
 - name: Create OUs and users for finance.local
   win_shell: |

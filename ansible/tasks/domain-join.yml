@@ -6,6 +6,7 @@
 
 - name: Set static IP and DNS for corp member servers
   win_shell: |
+    Start-Sleep -Seconds 5
     $adapter = Get-NetAdapter | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
     $ip = "{{ ansible_host }}"
     $prefix = 21
@@ -14,6 +15,19 @@
     netsh interface ip set address "$($adapter.Name)" static $ip 255.255.248.0 $gateway 1
     netsh interface ip set dns "$($adapter.Name)" static $dns
     Write-Host "IP configured: $ip/21"
+  async: 20
+  poll: 0
+
+- name: Wait for background IP change to drop the network adapter
+  pause:
+    seconds: 15
+
+- name: Wait for network to stabilize
+  wait_for_connection:
+    timeout: 60
+
+- name: Reset WinRM connection to clear stale sockets
+  meta: reset_connection
 
 - name: Set hostname from short name
   win_hostname:
@@ -28,6 +42,20 @@
   wait_for_connection:
     delay: 30
     timeout: 300
+
+- name: Wait for CORP.LOCAL AD DS to be fully online and responsive
+  win_shell: |
+    Write-Host "Waiting for 10.10.0.10 to open LDAP port..."
+    while ($true) {
+        $tcp = Test-NetConnection -ComputerName 10.10.0.10 -Port 389 -WarningAction SilentlyContinue
+        if ($tcp.TcpTestSucceeded) {
+            Write-Host "LDAP is UP! Giving AD DS 30 extra seconds to stabilize..."
+            Start-Sleep -Seconds 30
+            break
+        }
+        Start-Sleep -Seconds 15
+    }
+  timeout: 900
 
 - name: Join corp.local domain
   microsoft.ad.membership:

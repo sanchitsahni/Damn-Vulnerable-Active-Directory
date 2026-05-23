@@ -145,6 +145,26 @@ download_windows_media() {
 }
 
 # ==============================================================================
+# Phase 2.5: Convert VHD to QCOW2 Master Template
+# ==============================================================================
+convert_master_template() {
+    local vhd_file="${CFG_MEDIA_PATH}/windows-server-2022-eval.vhd"
+    local base_qcow2="${CFG_MEDIA_PATH}/windows-server-2022-base.qcow2"
+
+    if [ ! -f "$base_qcow2" ]; then
+        log "Converting VHD to QCOW2 master template (this takes a few minutes)..."
+        if [ ! -f "$vhd_file" ]; then
+            err "VHD file not found: $vhd_file. Cannot convert to QCOW2."
+            exit 1
+        fi
+        qemu-img convert -O qcow2 "$vhd_file" "$base_qcow2"
+        log "Master QCOW2 template created successfully."
+    else
+        info "Master QCOW2 template already exists: $base_qcow2"
+    fi
+}
+
+# ==============================================================================
 # Phase 3: VM Creation & Deployment
 # ==============================================================================
 create_vms() {
@@ -261,10 +281,8 @@ EOF
     install_dependencies
     check_kvm
     setup_networks
-    download_windows_media
     create_vms
     wait_for_vms
-    activate_windows
     run_ansible
     finalize
 
