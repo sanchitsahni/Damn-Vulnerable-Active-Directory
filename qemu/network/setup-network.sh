@@ -22,6 +22,11 @@ create_network_bridge() {
     # Check if bridge already exists
     if ip link show "$name" &>/dev/null; then
         info "Bridge $name already exists."
+        # Allow qemu-bridge-helper for this bridge
+        sudo mkdir -p /etc/qemu
+        if ! sudo grep -q "^allow $name\$" /etc/qemu/bridge.conf 2>/dev/null; then
+            echo "allow $name" | sudo tee -a /etc/qemu/bridge.conf >/dev/null
+        fi
         return 0
     fi
 
@@ -31,6 +36,12 @@ create_network_bridge() {
     sudo ip link add name "$name" type bridge
     sudo ip addr add "${gateway}/24" dev "$name"
     sudo ip link set "$name" up
+
+    # Allow qemu-bridge-helper for this bridge
+    sudo mkdir -p /etc/qemu
+    if ! sudo grep -q "^allow $name\$" /etc/qemu/bridge.conf 2>/dev/null; then
+        echo "allow $name" | sudo tee -a /etc/qemu/bridge.conf >/dev/null
+    fi
 
     # Enable IP forwarding
     sudo sysctl -w net.ipv4.ip_forward=1 >/dev/null

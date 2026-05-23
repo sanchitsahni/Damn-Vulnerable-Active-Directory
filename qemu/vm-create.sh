@@ -321,12 +321,12 @@ PSCRIPT
 
     # Create the ISO
     if command -v genisoimage &>/dev/null; then
-        genisoimage -quiet -J -r -o "$iso_output" "/tmp/dvad-iso/${vm_name}/" 2>/dev/null || \
-        genisoimage -J -r -o "$iso_output" "/tmp/dvad-iso/${vm_name}/"
+        genisoimage -quiet -udf -J -r -l -o "$iso_output" "/tmp/dvad-iso/${vm_name}/" 2>/dev/null || \
+        genisoimage -udf -J -r -l -o "$iso_output" "/tmp/dvad-iso/${vm_name}/"
     elif command -v mkisofs &>/dev/null; then
-        mkisofs -quiet -J -r -o "$iso_output" "/tmp/dvad-iso/${vm_name}/"
+        mkisofs -quiet -udf -J -r -l -o "$iso_output" "/tmp/dvad-iso/${vm_name}/"
     elif command -v xorrisofs &>/dev/null; then
-        xorrisofs -quiet -J -r -o "$iso_output" "/tmp/dvad-iso/${vm_name}/"
+        xorrisofs -quiet -udf -J -r -l -o "$iso_output" "/tmp/dvad-iso/${vm_name}/"
     else
         warn "No ISO creation tool found. Autounattend will not be injected for $vm_name"
         rm -rf "/tmp/dvad-iso/${vm_name}"
@@ -430,17 +430,18 @@ launch_vm() {
         -device "virtio-blk-pci,drive=drive0,bootindex=1"
         # Windows ISO (CD-ROM)
         -drive "file=${ISO_FILE},if=none,id=cdrom0,media=cdrom"
-        -device "ide-cd,drive=cdrom0,bootindex=2"
+        -device "ide-cd,drive=cdrom0,bus=ide.0,bootindex=2"
         # VirtIO drivers ISO
         -drive "file=${VIRTIO_ISO},if=none,id=cdrom1,media=cdrom"
-        -device "ide-cd,drive=cdrom1,bootindex=3"
+        -device "ide-cd,drive=cdrom1,bus=ide.1,bootindex=3"
     )
 
     # Autounattend ISO if available
     if [ -f "$auto_iso" ]; then
         QEMU_CMD+=(
-            -drive "file=${auto_iso},if=none,id=cdrom2,media=cdrom"
-            -device "ide-cd,drive=cdrom2"
+            -device qemu-xhci,id=usb_controller
+            -drive "file=${auto_iso},if=none,id=usb_auto,format=raw"
+            -device "usb-storage,bus=usb_controller.0,drive=usb_auto,removable=on"
         )
     fi
 

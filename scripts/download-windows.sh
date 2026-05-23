@@ -21,7 +21,7 @@ KNOWN_SHA256="3e4fa6d8507b554856fc9ca6699a32c4ad13e94e6da95dd4acdb79a6a7a8a9c0"
 get_microsoft_download_url() {
     # Microsoft eval center URL - this changes periodically
     # Return the most common stable CDN URL
-    echo "https://software-static.download.prss.microsoft.com/dbazure/Win2022_Eval_English_x64.iso"
+    echo "https://go.microsoft.com/fwlink/p/?LinkID=2195280&clcid=0x409&culture=en-us&country=US"
 }
 
 download_with_aria2() {
