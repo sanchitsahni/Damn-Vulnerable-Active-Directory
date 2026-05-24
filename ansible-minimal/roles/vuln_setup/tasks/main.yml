@@ -34,8 +34,11 @@
     type: dword
 
 - name: Configure AlwaysInstallElevated HKCU
-  ansible.windows.win_shell: |
-    reg add "HKCU\\Software\\Policies\\Microsoft\\Windows\\Installer" /v AlwaysInstallElevated /t REG_DWORD /d 1 /f
+  ansible.windows.win_regedit:
+    path: "HKCU:\\SOFTWARE\\Policies\\Microsoft\\Windows\\Installer"
+    name: "AlwaysInstallElevated"
+    data: 1
+    type: dword
 
 - name: Configure PATH hijacking directory (PE-010)
   ansible.windows.win_shell: |

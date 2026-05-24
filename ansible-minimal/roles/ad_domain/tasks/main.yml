@@ -116,8 +116,19 @@
 
 - name: Wait for Active Directory Web Services (ADWS) to start
   ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
     while ((Get-Service -Name ADWS -ErrorAction SilentlyContinue).Status -ne 'Running') {
         Start-Sleep -Seconds 5
+    }
+    Write-Host "ADWS service is running. Waiting for AD cmdlets to respond..."
+    while ($true) {
+        try {
+            $null = Get-ADDomain -ErrorAction Stop
+            Write-Host "ADWS is fully responsive."
+            break
+        } catch {
+            Start-Sleep -Seconds 5
+        }
     }
   when: inventory_hostname == 'dc01.corp.local'
 
@@ -186,8 +197,10 @@
     $user = Get-ADUser -Identity "sync_user"
     $acl = Get-ACL "AD:\DC=corp,DC=local"
     $sid = [System.Security.Principal.SecurityIdentifier] $user.SID
-    $rule1 = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sid, " replicate directory changes", "Allow")
-    $rule2 = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sid, " replicate directory changes all", "Allow")
+    $guid1 = [Guid]"1131f6aa-9c07-11d1-f79f-00c04fc2dcd2"
+    $guid2 = [Guid]"1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"
+    $rule1 = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sid, [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight, [System.Security.AccessControl.AccessControlType]::Allow, $guid1)
+    $rule2 = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sid, [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight, [System.Security.AccessControl.AccessControlType]::Allow, $guid2)
     $acl.AddAccessRule($rule1)
     $acl.AddAccessRule($rule2)
     Set-ACL "AD:\DC=corp,DC=local" $acl

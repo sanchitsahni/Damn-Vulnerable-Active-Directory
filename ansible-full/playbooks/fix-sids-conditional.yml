@@ -1,0 +1,103 @@
+---
+- name: Pre-Flight Check - Detect and Fix SID Collisions
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: Get Machine SID
+      win_shell: (Get-LocalUser | Where-Object Name -eq Administrator).SID.Value
+      register: machine_sid_result
+      changed_when: false
+
+    - name: Set SID fact
+      set_fact:
+        machine_sid: "{{ machine_sid_result.stdout | trim }}"
+
+- name: Fix SID Collision by Sysprepping Member Servers
+  hosts: corp_servers,corp_workstation,finance_dcs,root_dcs
+  gather_facts: no
+  tasks:
+    - name: Check if SID matches DC01
+      set_fact:
+        needs_sysprep: "{{ machine_sid == hostvars['dc01.corp.local'].machine_sid }}"
+
+    - name: Generate unattend.xml for Sysprep
+      win_copy:
+        dest: C:\sysprep-unattend.xml
+        content: |
+          <?xml version="1.0" encoding="utf-8"?>
+          <unattend xmlns="urn:schemas-microsoft-com:unattend" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+              <settings pass="specialize">
+                  <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+                      <ComputerName>*</ComputerName>
+                  </component>
+              </settings>
+              <settings pass="oobeSystem">
+                  <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+                      <AutoLogon>
+                          <Password><Value>DVADlab2024!</Value></Password>
+                          <Enabled>true</Enabled>
+                          <LogonCount>5</LogonCount>
+                          <Username>Administrator</Username>
+                      </AutoLogon>
+                      <OOBE>
+                          <HideEULAPage>true</HideEULAPage>
+                          <HideLocalAccountScreen>true</HideLocalAccountScreen>
+                          <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
+                          <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+                          <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
+                          <ProtectYourPC>3</ProtectYourPC>
+                      </OOBE>
+                      <UserAccounts>
+                          <LocalAccounts>
+                              <LocalAccount wcm:action="add">
+                                  <Password><Value>DVADlab2024!</Value></Password>
+                                  <Group>Administrators</Group>
+                                  <DisplayName>Administrator</DisplayName>
+                                  <Name>Administrator</Name>
+                                  <Description>Build Account</Description>
+                              </LocalAccount>
+                          </LocalAccounts>
+                          <AdministratorPassword>
+                              <Value>DVADlab2024!</Value>
+                              <PlainText>true</PlainText>
+                          </AdministratorPassword>
+                      </UserAccounts>
+                      <FirstLogonCommands>
+                          <SynchronousCommand wcm:action="add">
+                              <Order>1</Order>
+                              <CommandLine>cmd.exe /c "powershell -Command Enable-PSRemoting -Force"</CommandLine>
+                          </SynchronousCommand>
+                          <SynchronousCommand wcm:action="add">
+                              <Order>2</Order>
+                              <CommandLine>cmd.exe /c "winrm set winrm/config/service @{AllowUnencrypted=\"true\"}"</CommandLine>
+                          </SynchronousCommand>
+                          <SynchronousCommand wcm:action="add">
+                              <Order>3</Order>
+                              <CommandLine>cmd.exe /c "winrm set winrm/config/service/auth @{Basic=\"true\"}"</CommandLine>
+                          </SynchronousCommand>
+                          <SynchronousCommand wcm:action="add">
+                              <Order>4</Order>
+                              <CommandLine>cmd.exe /c "powershell -Command Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False"</CommandLine>
+                          </SynchronousCommand>
+                          <SynchronousCommand wcm:action="add">
+                              <Order>5</Order>
+                              <CommandLine>cmd.exe /c "powershell -Command Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name 'fDenyTSConnections' -value 0"</CommandLine>
+                          </SynchronousCommand>
+                      </FirstLogonCommands>
+                  </component>
+              </settings>
+          </unattend>
+      when: needs_sysprep | bool
+
+    - name: Run Sysprep and reboot
+      win_shell: |
+        Start-Process -FilePath "C:\Windows\System32\Sysprep\sysprep.exe" -ArgumentList "/generalize /oobe /reboot /unattend:C:\sysprep-unattend.xml /quiet" -NoNewWindow
+      async: 10
+      poll: 0
+      when: needs_sysprep | bool
+
+    - name: Wait for WinRM to come back up after Sysprep
+      wait_for_connection:
+        timeout: 1200
+        delay: 60
+      when: needs_sysprep | bool

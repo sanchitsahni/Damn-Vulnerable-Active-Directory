@@ -1,4 +1,5 @@
 ---
+- import_playbook: fix-sids-conditional.yml
 # ==============================================================================
 # DVAD - Site Playbook
 # Master playbook for full AD lab provisioning

@@ -10,6 +10,8 @@ import csv
 import re
 import os
 import subprocess
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
     from ldap3 import Server, Connection, ALL, SIMPLE, ANONYMOUS, NTLM
@@ -86,10 +88,13 @@ def udp_open(ip, port, timeout=2):
     except Exception:
         return False
 
+LDAP_LOCK = threading.Lock()
+
 def ldap_query(conn, ldap_filter, attributes, base="DC=corp,DC=local"):
     try:
-        conn.search(base, ldap_filter, attributes=attributes)
-        return conn.entries
+        with LDAP_LOCK:
+            conn.search(base, ldap_filter, attributes=attributes)
+            return conn.entries
     except Exception:
         return []
 
@@ -1302,34 +1307,34 @@ def verify_ad_vulns():
                 "winrm": C.YELLOW, "http": C.GREEN, "anon_ldap": C.GREEN,
                 "dns_axfr": C.CYAN, "smb_null": C.CYAN}
 
-    for rule in rules:
-        t  = rule.get("type","")
-        # Skip winrm/http if libs unavailable
+    def process_rule(rule):
+        t = rule.get("type","")
         if t == "winrm" and not HAS_WINRM:
-            status_str = "SKIP (no pywinrm)"
-            report_data.append([rule["id"], rule["name"], status_str])
-            skipped_count += 1
-            continue
+            return rule, "SKIP (no pywinrm)", False
         if t == "http" and not HAS_REQUESTS:
-            status_str = "SKIP (no requests)"
-            report_data.append([rule["id"], rule["name"], status_str])
-            skipped_count += 1
-            continue
+            return rule, "SKIP (no requests)", False
         if t == "dns_axfr" and not HAS_DNS:
-            status_str = "SKIP (no dnspython)"
-            report_data.append([rule["id"], rule["name"], status_str])
-            skipped_count += 1
-            continue
-
+            return rule, "SKIP (no dnspython)", False
+        
         is_vuln = run_check(rule, conn)
-        status_str = "VULNERABLE" if is_vuln else "SECURE"
-        report_data.append([rule["id"], rule["name"], status_str])
+        return rule, "VULNERABLE" if is_vuln else "SECURE", is_vuln
 
-        if is_vuln:
-            vuln_count += 1
-            col = type_map.get(t, C.GREEN)
-            print(f"{C.GREEN}[+]{C.END} {rule['id']:<12} {rule['name']:<68} {C.GREEN}VULNERABLE{C.END}  [{col}{t}{C.END}]")
+    with ThreadPoolExecutor(max_workers=50) as executor:
+        futures = {executor.submit(process_rule, r): r for r in rules}
+        
+        for future in as_completed(futures):
+            rule, status_str, is_vuln = future.result()
+            report_data.append([rule["id"], rule["name"], status_str])
+            
+            if "SKIP" in status_str:
+                skipped_count += 1
+            elif is_vuln:
+                vuln_count += 1
+                t = rule.get("type","")
+                col = type_map.get(t, C.GREEN)
+                print(f"{C.GREEN}[+]{C.END} {rule['id']:<12} {rule['name']:<68} {C.GREEN}VULNERABLE{C.END}  [{col}{t}{C.END}]")
 
+    report_data.sort(key=lambda x: x[0])  # Sort by ID for consistency in CSV
     conn.unbind()
 
     print("\n" + "="*100)

@@ -28,7 +28,7 @@
   win_shell: |
     Import-Module ActiveDirectory
     Set-ADAccountControl -Identity "svc_web" -TrustedToAuthForDelegation $true
-    Set-ADUser -Identity "svc_web" -Add @{msDS-AllowedToDelegateTo="HTTP/ws01.corp.local"}
+    Set-ADUser -Identity "svc_web" -Add @{'msDS-AllowedToDelegateTo'="HTTP/ws01.corp.local"}
   ignore_errors: yes
 
 - name: Configure unconstrained delegation on FILE01
@@ -50,10 +50,10 @@
     Import-Module ActiveDirectory
     $comp = Get-ADComputer -Identity "SQL01"
     $svc = Get-ADUser -Identity "svc_web"
-    $sid = New-Object System.Security.Principal.SecurityIdentifier ($svc.SID)
-    $raw = New-Object byte[] $sid.BinaryLength
-    $sid.GetBinaryForm($raw,0)
-    Set-ADComputer -Identity $comp -Replace @{'msDS-AllowedToActOnBehalfOfOtherIdentity'=$raw}
+    $sd = New-Object Security.AccessControl.RawSecurityDescriptor "O:BAD:(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;$($svc.SID))"
+    $sdBytes = New-Object byte[] ($sd.BinaryLength)
+    $sd.GetBinaryForm($sdBytes, 0)
+    Set-ADComputer -Identity $comp -Replace @{'msDS-AllowedToActOnBehalfOfOtherIdentity'=$sdBytes}
   ignore_errors: yes
 
 - name: Disable RC4 encryption support on DC (demonstrate AES-only but break things)
