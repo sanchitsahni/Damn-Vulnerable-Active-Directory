@@ -1,0 +1,70 @@
+---
+# ==============================================================================
+# DVAD - Lab Verification / Sanity Checks
+# Target: dc01.corp.local
+# ==============================================================================
+
+- name: Verify AD forest is healthy
+  win_shell: |
+    dcdiag /q
+    if ($LASTEXITCODE -ne 0) {
+      Write-Host "DCDiag warnings found, but continuing..."
+    }
+  ignore_errors: yes
+
+- name: Verify users were created
+  win_shell: |
+    Import-Module ActiveDirectory
+    $users = Get-ADUser -Filter * | Select-Object -ExpandProperty SamAccountName
+    $required = @("attacker","user1","user2","svc_web","svc_sql","svc_nospreauth","backup_user","helpdesk","sync_user")
+    $missing = @()
+    foreach ($u in $required) {
+      if ($users -notcontains $u) { $missing += $u }
+    }
+    if ($missing.Count -eq 0) {
+      Write-Host "All required users present."
+    } else {
+      Write-Host "MISSING USERS: $($missing -join ', ')"
+    }
+  ignore_errors: yes
+
+- name: Verify trusts exist
+  win_shell: |
+    $trusts = Get-ADTrust -Filter * | Select-Object -ExpandProperty Name
+    Write-Host "Trusts: $($trusts -join ', ')"
+  ignore_errors: yes
+
+- name: Verify SPNs configured
+  win_shell: |
+    Import-Module ActiveDirectory
+    Get-ADUser -Filter {ServicePrincipalNames -ne "$null"} -Properties ServicePrincipalNames | Select-Object SamAccountName,ServicePrincipalNames
+  ignore_errors: yes
+
+- name: Verify ADCA service
+  win_shell: |
+    Get-Service certsvc | Select-Object Name,Status
+  ignore_errors: yes
+
+- name: Ensure verification report directory exists
+  win_file:
+    path: 'C:\CTF'
+    state: directory
+
+- name: Generate verification report
+  win_shell: |
+    Import-Module ActiveDirectory
+    $usersCount     = (Get-ADUser     -Filter *).Count
+    $groupsCount    = (Get-ADGroup    -Filter *).Count
+    $computersCount = (Get-ADComputer -Filter *).Count
+    $trustsCount    = (Get-ADTrust    -Filter *).Count
+    $generated      = Get-Date
+    $report = "=== DVAD Lab Verification Report ===`r`n"
+    $report += "Generated: $generated`r`n`r`n"
+    $report += "Users:     $usersCount`r`n"
+    $report += "Groups:    $groupsCount`r`n"
+    $report += "Computers: $computersCount`r`n"
+    $report += "Trusts:    $trustsCount`r`n`r`n"
+    $report += "=== End Report ===`r`n"
+    $report | Out-File -FilePath "C:\CTF\verification-report.txt" -Encoding ASCII
+    Write-Host $report
+  ignore_errors: yes

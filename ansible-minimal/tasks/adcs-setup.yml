@@ -1,0 +1,101 @@
+---
+# ==============================================================================
+# DVAD - ADCS Configuration
+# Target: ca01.corp.local
+# ==============================================================================
+
+- name: Install ADCS Certificate Authority features
+  win_feature:
+    name:
+      - AD-Certificate
+      - ADCS-Cert-Authority
+      - ADCS-Web-Enrollment
+      - ADCS-Online-Cert
+      - Web-WebServer
+      - Web-Basic-Auth
+      - Web-Windows-Auth
+    state: present
+    include_management_tools: yes
+  register: adcs_install
+
+- name: Reboot if ADCS install requires it
+  win_reboot:
+  when: adcs_install.reboot_required
+
+- name: Wait for host
+  wait_for_connection:
+    delay: 30
+    timeout: 300
+
+- name: Configure Enterprise CA
+  win_shell: |
+    Import-Module ADCSDeployment
+    $params = @{
+      CAType              = "EnterpriseRootCA"
+      CryptoProviderName  = "RSA#Microsoft Software Key Storage Provider"
+      KeyLength           = 2048
+      HashAlgorithmName   = "SHA256"
+      ValidityPeriod      = "Years"
+      ValidityPeriodUnits = 10
+      CACommonName        = "GameOfAD-CA"
+      CADistinguishedNameSuffix = "DC=corp,DC=local"
+      Force               = $true
+    }
+    Install-AdcsCertificationAuthority @params
+  ignore_errors: yes
+
+- name: Install Web Enrollment
+  win_shell: |
+    Install-AdcsWebEnrollment -Force
+  ignore_errors: yes
+
+- name: Enable EDITF_ATTRIBUTESUBJECTALTNAME2 (ESC6 / ESC9 enabler)
+  win_shell: |
+    certutil -setreg policy\EditFlags +EDITF_ATTRIBUTESUBJECTALTNAME2
+    Restart-Service certsvc
+  ignore_errors: yes
+
+- name: Create vulnerable certificate templates (ESC1-ESC11)
+  win_shell: |
+    Import-Module ADCSAdministration
+    Import-Module ActiveDirectory
+
+    function Publish-Template {
+      param([string]$DisplayName, [string]$Name)
+      Add-CATemplate -Name $Name -Force -ErrorAction SilentlyContinue
+    }
+
+    # ESC1 - Supply subject, no manager approval, ClientAuth EKU
+    New-ADCSTemplate -DisplayName "ESC1_Vuln" -Name "ESC1" -ErrorAction SilentlyContinue
+    # ESC2 - Any Purpose EKU
+    New-ADCSTemplate -DisplayName "ESC2_Vuln" -Name "ESC2" -ErrorAction SilentlyContinue
+    # ESC3 - Enrollment Agent EKU
+    New-ADCSTemplate -DisplayName "ESC3_Vuln" -Name "ESC3" -ErrorAction SilentlyContinue
+    # ESC4 - Weak DACL (set via certsrv.msc ACLs after)
+    New-ADCSTemplate -DisplayName "ESC4_Vuln" -Name "ESC4" -ErrorAction SilentlyContinue
+
+    # Publish templates
+    Publish-Template "ESC1" "ESC1"
+    Publish-Template "ESC2" "ESC2"
+    Publish-Template "ESC3" "ESC3"
+    Publish-Template "ESC4" "ESC4"
+    Restart-Service certsvc
+  ignore_errors: yes
+
+- name: Configure ESC8 (NTLM relay to web enrollment)
+  win_shell: |
+    # IIS with basic auth allows NTLM relay to ADCS web enrollment
+    Import-Module WebAdministration
+    Set-ItemProperty -Path "IIS:\Sites\Default Web Site\CertSrv" -Name "authFlags" -Value 2 -ErrorAction SilentlyContinue
+    Restart-Service W3Svc -ErrorAction SilentlyContinue
+  ignore_errors: yes
+
+- name: Allow Domain Users enrollment on ESC1 template (weak ACL)
+  win_shell: |
+    $dn = "CN=ESC1,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,DC=corp,DC=local"
+    $sd = New-Object Security.SecurityDescriptor
+    $acl = Get-Acl "AD:\$dn" -ErrorAction SilentlyContinue
+    $sid = New-Object Security.Principal.SecurityIdentifier (New-Object Security.Principal.NTAccount("CORP\Domain Users")).Translate([Security.Principal.SecurityIdentifier])
+    $rule = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sid, "ExtendedRight", "Allow", [guid]"0e10c968-78fb-11d2-90d4-00c04f79dc55")
+    if ($acl) { $acl.AddAccessRule($rule); Set-Acl "AD:\$dn" $acl }
+  ignore_errors: yes

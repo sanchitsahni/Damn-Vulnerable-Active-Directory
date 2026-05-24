@@ -1,0 +1,42 @@
+---
+# ==============================================================================
+# DVAD Ansible Inventory - SINGLE-DC MODE
+# ==============================================================================
+
+all:
+  vars:
+    ansible_connection: winrm
+    ansible_winrm_transport: ntlm
+    ansible_winrm_server_cert_validation: ignore
+    ansible_user: Administrator
+    ansible_password: "DVADlab2024!"
+    ansible_winrm_operation_timeout_sec: 120
+    ansible_winrm_read_timeout_sec: 180
+    ansible_port: 5985
+    dvad_home: "{{ playbook_dir }}/.."
+
+  children:
+    corp_domain:
+      vars:
+        domain_name: corp.local
+        domain_netbios: CORP
+        domain_safe_mode_password: "DVADlab2024!"
+        domain_admin_user: Administrator
+        domain_admin_password: "DVADlab2024!"
+        forest_functional_level: "WinThreshold"
+        domain_functional_level: "WinThreshold"
+        subnet: 10.10.0.0/21
+      children:
+        corp_dcs:
+          hosts:
+            dc01.corp.local:
+              ansible_host: 10.10.0.10
+              ansible_winrm_host: 10.10.0.10
+              role: primary_dc
+              is_dc: true
+              is_dns_server: true
+              is_adcs_ca: false
+
+    all_dcs:
+      children:
+        corp_dcs:

@@ -1,0 +1,9 @@
+=== QUICK REFERENCE ===
+Recon:       SharpView, BloodHound, Certify find
+Passwords:   Rubeus kerberoast, AS-REP roast, password spray
+Delegation:  Unconstrained on FILE01, Constrained on svc_web, RBCD on SQL01
+ADCS:        ESC1, ESC4, ESC8 templates available
+Trusts:      CORP <-> FINANCE (external), CORP <-> ROOT (tree-root)
+Privilege:   Unquoted path, Weak service DACL, AlwaysInstallElevated
+Persist:     svc_update (service acct with hidden DA membership)
+Flags:       C:\Flags\FLAG-*.txt

@@ -144,3 +144,7 @@ flags/*.generated.json
 *.bak
 *.orig
 *.tmp
+
+# --- Reports ---
+vulnerability_report*.csv
+

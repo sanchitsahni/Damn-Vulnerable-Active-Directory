@@ -1,0 +1,369 @@
+---
+# ==============================================================================
+# DVAD — Enumeration Surface (ENUM-001..080)
+# Enables every service that's part of a "fully vulnerable AD enumeration lab"
+# so attackers can practice the full breadth of recon techniques.
+#
+# This file is intentionally idempotent. Each block can be commented out if
+# you want to dial scope back. None of this introduces NEW credentials — it
+# only enables LISTENERS that already-existing weak configs depend on.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. SQL Server Browser (UDP 1434) — REC-009 / ENUM-046
+# Without this the SQL instance is invisible to broadcast probes.
+# Runs on sql01 only.
+# ------------------------------------------------------------------------------
+- name: ENUM | Enable + start SQL Server Browser
+  win_service:
+    name: SQLBrowser
+    start_mode: auto
+    state: started
+  when: inventory_hostname == 'sql01.corp.local'
+  failed_when: false   # tolerate Express SKU without Browser
+  tags: enum, mssql
+
+# ------------------------------------------------------------------------------
+# 2. SNMP service with public+private community strings — ENUM-054
+# Installs feature + community config. Public = RO, private = RW.
+# Skipped on workstations to keep load light; runs on every server.
+# ------------------------------------------------------------------------------
+- name: ENUM | Install SNMP feature
+  win_feature:
+    name: SNMP-Service
+    state: present
+    include_management_tools: true
+  when: inventory_hostname != 'ws01.corp.local'
+  failed_when: false
+  register: snmp_feat
+  tags: enum, snmp
+
+- name: ENUM | Configure SNMP communities (public RO, private RW)
+  win_regedit:
+    path: HKLM:\SYSTEM\CurrentControlSet\Services\SNMP\Parameters\ValidCommunities
+    name: "{{ item.name }}"
+    data: "{{ item.data }}"
+    type: dword
+  loop:
+    - { name: 'public',  data: 4 }   # 4 = READ ONLY
+    - { name: 'private', data: 8 }   # 8 = READ WRITE
+  when:
+    - inventory_hostname != 'ws01.corp.local'
+    - snmp_feat is defined and not snmp_feat.failed
+  failed_when: false
+  tags: enum, snmp
+
+- name: ENUM | Permit any host to query SNMP
+  win_regedit:
+    path: HKLM:\SYSTEM\CurrentControlSet\Services\SNMP\Parameters\PermittedManagers
+    name: '1'
+    data: 'localhost'
+    type: string
+  when:
+    - inventory_hostname != 'ws01.corp.local'
+    - snmp_feat is defined and not snmp_feat.failed
+  failed_when: false
+  tags: enum, snmp
+
+- name: ENUM | Open SNMP firewall
+  win_firewall_rule:
+    name: "DVAD SNMP {{ item }}"
+    localport: 161
+    protocol: udp
+    action: allow
+    direction: in
+    state: present
+    enabled: yes
+  loop: ['in']
+  when: inventory_hostname != 'ws01.corp.local'
+  failed_when: false
+  tags: enum, snmp
+
+- name: ENUM | Restart SNMP
+  win_service:
+    name: SNMP
+    state: restarted
+    start_mode: auto
+  when: inventory_hostname != 'ws01.corp.local'
+  failed_when: false
+  tags: enum, snmp
+
+# ------------------------------------------------------------------------------
+# 3. Print Spooler on every member (not just dc01) — ENUM-013 / IA-015
+# DVAD's recon-vuln file enables Spooler only on dc01; mirror to members so
+# PrinterBug / PrintNightmare are reachable everywhere.
+# ------------------------------------------------------------------------------
+- name: ENUM | Install Print-Server feature + start Spooler everywhere
+  block:
+    - name: ENUM | Install Print-Server feature
+      win_feature:
+        name: Print-Server
+        state: present
+        include_management_tools: true
+      failed_when: false
+    - name: ENUM | Start Spooler service
+      win_service:
+        name: Spooler
+        start_mode: auto
+        state: started
+  tags: enum, spooler
+
+# ------------------------------------------------------------------------------
+# 4. WebClient (WebDAV client) auto-start everywhere — ENUM-016
+# Required for ShadowCoerce → HTTP coercion chains.
+# ------------------------------------------------------------------------------
+- name: ENUM | Install + start WebClient on every host
+  block:
+    - name: ENUM | Install WebDAV-Redirector feature
+      win_feature:
+        name: WebDAV-Redirector
+        state: present
+      failed_when: false
+    - name: ENUM | Start WebClient service
+      win_service:
+        name: WebClient
+        start_mode: auto
+        state: started
+      failed_when: false
+  tags: enum, webdav
+
+# ------------------------------------------------------------------------------
+# 5. IIS WebDAV Publishing on ca01 — ENUM-043
+# Adds PROPFIND surface to the ADCS web server; also serves a writable WebDAV
+# directory the attacker can use as an NTLM relay endpoint.
+# Depends on Web-Server (IIS) which adcs-setup.yml installs via Web-Enrollment.
+# ------------------------------------------------------------------------------
+- name: ENUM | Install IIS WebDAV publishing on ca01
+  win_feature:
+    name:
+      - Web-Server
+      - Web-DAV-Publishing
+      - Web-Dir-Browsing
+    state: present
+    include_management_tools: true
+  when: inventory_hostname == 'ca01.corp.local'
+  failed_when: false
+  tags: enum, webdav
+
+# ------------------------------------------------------------------------------
+# 6. Telnet server on file01 — ENUM-066 (legacy enum)
+# NOTE: Telnet-Server was REMOVED in Windows Server 2019+. On Server 2022
+# this task will fail. We keep it (with failed_when:false) so the playbook
+# doesn't break on older Server 2016 hosts, but on 2022 IA-036 (Telnet brute)
+# is documented-only — the service literally does not exist. To restore the
+# vector you would need to ship a 3rd-party Telnet daemon binary. Out of scope
+# for the lab baseline.
+# ------------------------------------------------------------------------------
+- name: ENUM | Install Telnet Server on file01 (legacy enum practice — Server 2016 only; no-op on 2022)
+  win_feature:
+    name: Telnet-Server
+    state: present
+  when: inventory_hostname == 'file01.corp.local'
+  failed_when: false
+  tags: enum, telnet
+
+- name: ENUM | Start Telnet Server on file01
+  win_service:
+    name: TlntSvr
+    start_mode: auto
+    state: started
+  when: inventory_hostname == 'file01.corp.local'
+  failed_when: false
+  tags: enum, telnet
+
+# ------------------------------------------------------------------------------
+# 7. FTP (IIS Web-Ftp-Server) on file01 — anonymous read share
+# Pulls in Web-Server (IIS) as a dependency since file01 isn't otherwise an
+# IIS host.
+# ------------------------------------------------------------------------------
+- name: ENUM | Install Web-Ftp-Server on file01
+  win_feature:
+    name:
+      - Web-Server
+      - Web-Ftp-Server
+      - Web-Ftp-Service
+      - Web-Ftp-Ext
+    state: present
+    include_management_tools: true
+  when: inventory_hostname == 'file01.corp.local'
+  failed_when: false
+  tags: enum, ftp
+
+# ------------------------------------------------------------------------------
+# 8. SMB1 on file01 only — EternalBlue surface (IA-016)
+# DO NOT enable on DCs. This is gated to one host so the rest of the lab
+# isn't completely compromised in one shot.
+# ------------------------------------------------------------------------------
+- name: ENUM | Enable SMB1 on file01 (EternalBlue practice surface)
+  win_feature:
+    name: FS-SMB1
+    state: present
+  when: inventory_hostname == 'file01.corp.local'
+  tags: enum, smb1
+
+- name: ENUM | Set SMB1 enabled in registry on file01
+  win_regedit:
+    path: HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters
+    name: SMB1
+    data: 1
+    type: dword
+  when: inventory_hostname == 'file01.corp.local'
+  failed_when: false
+  tags: enum, smb1
+
+# ------------------------------------------------------------------------------
+# 9. NFS server feature on file01 + an export — ENUM (NFS gap)
+# ------------------------------------------------------------------------------
+- name: ENUM | Install NFS server on file01
+  win_feature:
+    name:
+      - FS-NFS-Service
+      - RSAT-NFS-Admin
+    state: present
+  when: inventory_hostname == 'file01.corp.local'
+  failed_when: false
+  tags: enum, nfs
+
+- name: ENUM | Create NFS export directory
+  win_file:
+    path: C:\NFSExport
+    state: directory
+  when: inventory_hostname == 'file01.corp.local'
+  failed_when: false
+  tags: enum, nfs
+
+- name: ENUM | Publish NFS share with anon access (best-effort)
+  win_shell: |
+    Import-Module NFS -ErrorAction SilentlyContinue
+    if (Get-Command New-NfsShare -ErrorAction SilentlyContinue) {
+        if (-not (Get-NfsShare -Name DVAD_NFS -ErrorAction SilentlyContinue)) {
+            New-NfsShare -Name DVAD_NFS -Path C:\NFSExport -EnableAnonymousAccess $true `
+                         -AnonymousUid 65534 -AnonymousGid 65534 -Permission readwrite | Out-Null
+        }
+    }
+  when: inventory_hostname == 'file01.corp.local'
+  failed_when: false
+  tags: enum, nfs
+
+# ------------------------------------------------------------------------------
+# 10. Shared printer object on file01 — for PrinterBug from a non-DC host
+# ------------------------------------------------------------------------------
+- name: ENUM | Publish a shared XPS printer on file01
+  win_shell: |
+    if (-not (Get-Printer -Name 'DVAD-PRN' -ErrorAction SilentlyContinue)) {
+        Add-Printer -Name 'DVAD-PRN' -DriverName 'Microsoft XPS Document Writer v4' `
+                    -PortName 'XPSPort:' -Shared -ShareName 'DVAD-PRN' -Published
+    }
+  when: inventory_hostname == 'file01.corp.local'
+  failed_when: false
+  tags: enum, spooler
+
+# ------------------------------------------------------------------------------
+# 11. ADWS (port 9389) firewall + ensure service running on every DC
+# ------------------------------------------------------------------------------
+- name: ENUM | Ensure ADWS auto-started on DCs
+  win_service:
+    name: ADWS
+    start_mode: auto
+    state: started
+  when: inventory_hostname in groups['all_dcs']
+  failed_when: false
+  tags: enum, adws
+
+# ------------------------------------------------------------------------------
+# 12. Null-session pipe parity across DCs (currently only on dc01)
+# Mirror dc01.corp's RestrictAnonymous=0 + NullSessionPipes to the other DCs
+# so enumerating from anonymous works against any forest.
+# ------------------------------------------------------------------------------
+- name: ENUM | Relax RestrictAnonymous on every DC
+  win_regedit:
+    path: HKLM:\SYSTEM\CurrentControlSet\Control\Lsa
+    name: "{{ item.name }}"
+    data: "{{ item.data }}"
+    type: dword
+  loop:
+    - { name: 'RestrictAnonymous',      data: 0 }
+    - { name: 'RestrictAnonymousSAM',   data: 0 }
+    - { name: 'EveryoneIncludesAnonymous', data: 1 }
+  when: inventory_hostname in groups['all_dcs']
+  failed_when: false
+  tags: enum, smb, anon
+
+- name: ENUM | Configure NullSessionPipes on every DC
+  win_regedit:
+    path: HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters
+    name: NullSessionPipes
+    data: ['netlogon', 'samr', 'lsarpc', 'browser', 'srvsvc', 'wkssvc']
+    type: multistring
+  when: inventory_hostname in groups['all_dcs']
+  failed_when: false
+  tags: enum, smb, anon
+
+# ------------------------------------------------------------------------------
+# 13. DNS AXFR open on every DC (currently only dc01.corp)
+# ------------------------------------------------------------------------------
+- name: ENUM | Allow AXFR from any server on every DC
+  win_shell: |
+    foreach ($z in (Get-DnsServerZone | Where-Object { -not $_.IsReverseLookupZone -and $_.ZoneName -notlike '_msdcs.*' -and $_.ZoneName -ne 'TrustAnchors' })) {
+        try { Set-DnsServerPrimaryZone -Name $z.ZoneName -SecureSecondaries TransferAnyServer } catch {}
+    }
+  when: inventory_hostname in groups['all_dcs']
+  failed_when: false
+  tags: enum, dns
+
+# ------------------------------------------------------------------------------
+# 14. SQL Browser broadcast + RDP NLA off on ws01
+# ------------------------------------------------------------------------------
+- name: ENUM | Disable RDP NLA on ws01 (BlueKeep practice gate)
+  win_regedit:
+    path: HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp
+    name: UserAuthentication
+    data: 0
+    type: dword
+  when: inventory_hostname == 'ws01.corp.local'
+  failed_when: false
+  tags: enum, rdp
+
+# ------------------------------------------------------------------------------
+# 15. WinRM HTTPS (5986) on every host in parallel with HTTP
+# Lets attackers practice cert pinning / TLS WinRM as well as plaintext.
+# ------------------------------------------------------------------------------
+- name: ENUM | Generate self-signed cert + enable WinRM HTTPS listener
+  win_shell: |
+    $existing = Get-ChildItem WSMan:\localhost\Listener -ErrorAction SilentlyContinue |
+                Where-Object { $_.Keys -match 'Transport=HTTPS' }
+    if (-not $existing) {
+        $cert = New-SelfSignedCertificate -DnsName $env:COMPUTERNAME -CertStoreLocation Cert:\LocalMachine\My
+        New-Item -Path WSMan:\localhost\Listener -Address * -Transport HTTPS `
+                 -Hostname $env:COMPUTERNAME -CertificateThumbPrint $cert.Thumbprint -Force | Out-Null
+        if (-not (Get-NetFirewallRule -Name DVAD-WinRMHTTPS -ErrorAction SilentlyContinue)) {
+            New-NetFirewallRule -Name DVAD-WinRMHTTPS -DisplayName 'WinRM HTTPS' `
+                                -Direction Inbound -Protocol TCP -LocalPort 5986 -Action Allow | Out-Null
+        }
+    }
+  failed_when: false
+  tags: enum, winrm
+
+# ------------------------------------------------------------------------------
+# 16. mDNS / link-local discovery — Windows doesn't ship a mDNS responder
+# natively, but ensure FunctionDiscovery + SSDP services are running so WSD
+# is observable.
+# ------------------------------------------------------------------------------
+- name: ENUM | Start FDResPub + SSDPSRV (WSD discovery)
+  win_service:
+    name: "{{ item }}"
+    start_mode: auto
+    state: started
+  loop: ['FDResPub', 'SSDPSRV', 'fdPHost']
+  failed_when: false
+  tags: enum, wsd
+
+# ------------------------------------------------------------------------------
+# 17. Mark host as "enum-surface fully enabled" for verify-lab.yml
+# ------------------------------------------------------------------------------
+- name: ENUM | Drop marker file
+  win_file:
+    path: C:\Windows\Temp\DVAD_ENUM_SURFACE_ENABLED
+    state: touch
+  failed_when: false
+  tags: enum

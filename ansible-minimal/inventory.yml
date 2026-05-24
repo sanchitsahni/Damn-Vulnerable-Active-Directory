@@ -1,0 +1,73 @@
+---
+# ==============================================================================
+# DVAD Ansible Inventory - MINIMAL MODE
+# ==============================================================================
+
+all:
+  vars:
+    ansible_connection: winrm
+    ansible_winrm_transport: ntlm
+    ansible_winrm_server_cert_validation: ignore
+    ansible_user: Administrator
+    ansible_password: "DVADlab2024!"
+    ansible_winrm_operation_timeout_sec: 120
+    ansible_winrm_read_timeout_sec: 180
+    ansible_port: 5985
+    dvad_home: "{{ playbook_dir }}/.."
+
+  children:
+    corp_domain:
+      vars:
+        domain_name: corp.local
+        domain_netbios: CORP
+        domain_safe_mode_password: "DVADlab2024!"
+        domain_admin_user: Administrator
+        domain_admin_password: "DVADlab2024!"
+        forest_functional_level: "WinThreshold"
+        domain_functional_level: "WinThreshold"
+        subnet: 10.10.0.0/21
+      children:
+        corp_dcs:
+          hosts:
+            dc01.corp.local:
+              ansible_host: 10.10.0.10
+              ansible_winrm_host: 10.10.0.10
+              role: primary_dc
+              is_dc: true
+              is_dns_server: true
+              is_adcs_ca: false
+        corp_servers:
+          hosts:
+            ca01.corp.local:
+              ansible_host: 10.10.0.12
+              ansible_winrm_host: 10.10.0.12
+              role: adcs_server
+              is_dc: false
+              is_adcs_ca: true
+            file01.corp.local:
+              ansible_host: 10.10.0.13
+              ansible_winrm_host: 10.10.0.13
+              role: file_server
+              is_dc: false
+            sql01.corp.local:
+              ansible_host: 10.10.0.14
+              ansible_winrm_host: 10.10.0.14
+              role: sql_server
+              is_dc: false
+        corp_workstation:
+          hosts:
+            ws01.corp.local:
+              ansible_host: 10.10.0.100
+              ansible_winrm_host: 10.10.0.100
+              role: attacker_workstation
+              is_dc: false
+              is_attacker_host: true
+
+    all_dcs:
+      children:
+        corp_dcs:
+
+    member_servers:
+      children:
+        corp_servers:
+        corp_workstation:

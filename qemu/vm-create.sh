@@ -61,7 +61,7 @@ scale_vm_defs() {
     # Sum current allocations to derive a scale factor.
     local sum_mem=0 sum_cpu=0
     for def in "${VM_DEFS[@]}"; do
-        IFS='|' read -r _h _m ram _d cpu _v _b _n <<< "$def"
+        IFS='|' read -r _host _mac ram _disk cpu _vnc _bridge _nic <<< "$def"
         sum_mem=$(( sum_mem + ram ))
         sum_cpu=$(( sum_cpu + cpu ))
     done
@@ -236,15 +236,42 @@ create_disk() {
     local size_gb="$2"
     local disk_path="${VM_DIR}/${vm_name}.qcow2"
     local base_qcow2="${MEDIA_DIR}/win2k25.qcow2"
+    local installed_marker="${VM_DIR}/${vm_name}.installed"
 
+    # If a valid (non-trivial) disk already exists, skip.
     if [ -f "$disk_path" ]; then
-        info "Disk exists for $vm_name: $(du -h "$disk_path" | cut -f1)"
-        return 0
+        local sz
+        sz=$(stat -c%s "$disk_path" 2>/dev/null || echo 0)
+        if [ "$sz" -gt 1048576 ]; then   # > 1 MB ⟹ real image, not empty clone
+            info "Disk exists for $vm_name: $(du -h "$disk_path" | cut -f1)"
+            touch "$installed_marker"     # ensure marker is present
+            return 0
+        fi
+        warn "$vm_name disk is too small (${sz} bytes) — recreating from base."
+        rm -f "$disk_path"
+    fi
+
+    if [ ! -f "$base_qcow2" ]; then
+        warn "Base QCOW2 not found: $base_qcow2 — run deploy.sh to convert VHD first."
+        return 1
     fi
 
     mkdir -p "$VM_DIR"
-    log "Creating linked clone for $vm_name (${size_gb}GB)..."
-    qemu-img create -f qcow2 -b "$base_qcow2" -F qcow2 "$disk_path" "${size_gb}G"
+    log "Cloning base QCOW2 for $vm_name (full copy, no backing file)..."
+    # Full standalone copy — no backing-file dependency, boots immediately.
+    qemu-img convert -f qcow2 -O qcow2 -p "$base_qcow2" "$disk_path"
+
+    # Resize to the requested size if the base is smaller.
+    local base_virtual_bytes
+    base_virtual_bytes=$(qemu-img info --output=json "$disk_path" 2>/dev/null | grep '"virtual-size"' | grep -o '[0-9]*' | head -1 || echo 0)
+    local target_bytes=$(( size_gb * 1024 * 1024 * 1024 ))
+    if [ "$target_bytes" -gt "${base_virtual_bytes:-0}" ]; then
+        qemu-img resize "$disk_path" "${size_gb}G" >/dev/null 2>&1 || true
+    fi
+
+    # Stamp as installed immediately — we boot directly from QCOW2, no ISO needed.
+    touch "$installed_marker"
+    log "$vm_name disk ready ($(du -h "$disk_path" | cut -f1), stamped .installed)." 
 }
 
 # ==============================================================================
@@ -255,113 +282,75 @@ launch_vm() {
     local hostname="$2"
     local mac="$3"
     local ram_mb="$4"
+    local disk_gb="$5"   # kept for future resize
     local vcpus="$6"
     local vnc_display="$7"
     local bridge="$8"
     local nic_model="$9"
 
     local disk_path="${VM_DIR}/${vm_name}.qcow2"
-    local auto_iso="${AUTOUNATTEND_DIR}/${vm_name}/autounattend-${vm_name}.iso"
     local vnc_arg="${VNC_BIND}:${vnc_display}"
     local vnc_port=$(( 5900 + vnc_display ))
 
-    # Display args differ between desktop and VPS profiles.
-    local DISPLAY_ARGS=()
-    if [ "$VPS_MODE" = "1" ]; then
-        DISPLAY_ARGS=(-display none -vnc "$vnc_arg" -vga std)
-    else
-        DISPLAY_ARGS=(-vnc "$vnc_arg" -vga qxl -usb -device usb-tablet)
-    fi
-
-    # Check if VM is already running
+    # Already running? Nothing to do.
     if pgrep -f "qemu-system.*${vm_name}" &>/dev/null; then
         info "VM $vm_name is already running."
         return 0
     fi
 
-    # Check if VM is already installed (disk exists and we can check readiness)
-    if [ -f "${VM_DIR}/${vm_name}.installed" ]; then
-        info "VM $vm_name already installed. Starting normally..."
-
-        # Start VM without install media
-        qemu-system-x86_64 \
-            -name "$vm_name" \
-            -machine "q35,accel=${ACCEL}" \
-            ${KVM_OPT} \
-            -cpu host \
-            -smp "cpus=${vcpus}" \
-            -m "${ram_mb}M" \
-            -drive "file=${disk_path},if=none,id=drive0,format=qcow2,cache=writeback" \
-            -device "virtio-blk-pci,drive=drive0,bootindex=1" \
-            -netdev "bridge,id=net0,br=${bridge}" \
-            -device "${nic_model}-net-pci,netdev=net0,mac=${mac}" \
-            "${DISPLAY_ARGS[@]}" \
-            -device virtio-balloon-pci \
-            -rtc base=localtime \
-            -daemonize \
-            -pidfile "${VM_DIR}/${vm_name}.pid" \
-            -monitor "unix:${VM_DIR}/${vm_name}.mon,server,nowait" 2>/dev/null &
-
-        return 0
+    if [ ! -f "$disk_path" ]; then
+        warn "Disk not found for $vm_name: $disk_path — skipping launch."
+        return 1
     fi
 
     log "Launching $vm_name ($hostname) - VNC: ${vnc_arg} (port ${vnc_port})"
 
-    # Build QEMU command
-    local QEMU_CMD=(
-        qemu-system-x86_64
-        -name "$vm_name"
-        -machine "q35,accel=${ACCEL}"
-        ${KVM_OPT}
-        -cpu host
-        -smp "cpus=${vcpus}"
-        -m "${ram_mb}M"
-        # Boot disk (using IDE native for VHD compatibility)
-        -drive "file=${disk_path},if=none,id=drive0,format=qcow2,cache=writeback"
-        -device "ide-hd,drive=drive0,bus=ide.0,bootindex=1"
-        # VirtIO drivers ISO
-        -drive "file=${VIRTIO_ISO},if=none,id=cdrom1,media=cdrom"
-        -device "ide-cd,drive=cdrom1,bus=ide.1,bootindex=3"
-    )
+    # Resolve NIC device name for QEMU
+    local nic_dev
+    case "$nic_model" in
+        virtio) nic_dev="virtio-net-pci" ;;
+        e1000)  nic_dev="e1000"          ;;
+        e1000e) nic_dev="e1000e"         ;;
+        *)      nic_dev="$nic_model"     ;;
+    esac
 
-    # Autounattend directory if available
-    if [ -d "$auto_iso" ]; then
-        QEMU_CMD+=(
-            -drive "file=fat:ro:${auto_iso},if=none,id=auto_drive,format=raw"
-            -device "ide-hd,drive=auto_drive,bus=ide.2"
-        )
-    fi
+    # ── Boot directly from QCOW2, no Windows ISO, no VirtIO ISO ─────────────
+    qemu-system-x86_64 \
+        -name          "$vm_name" \
+        -machine       "q35,accel=${ACCEL}" \
+        ${KVM_OPT} \
+        -cpu           host \
+        -smp           "cpus=${vcpus}" \
+        -m             "${ram_mb}M" \
+        -drive         "file=${disk_path},if=none,id=drive0,format=qcow2,cache=writeback" \
+        -device        "ide-hd,drive=drive0,bus=ide.0,bootindex=1" \
+        -netdev        "bridge,id=net0,br=${bridge}" \
+        -device        "${nic_dev},netdev=net0,mac=${mac}" \
+        -display       none \
+        -vnc           "${vnc_arg}" \
+        -vga           std \
+        -device        virtio-balloon-pci \
+        -rtc           base=localtime \
+        -boot          order=c \
+        -daemonize \
+        -pidfile       "${VM_DIR}/${vm_name}.pid" \
+        -monitor       "unix:${VM_DIR}/${vm_name}.mon,server,nowait" \
+        2>"${VM_DIR}/${vm_name}.log"
 
-    local nic_device="${nic_model}"
-    if [ "$nic_model" = "virtio" ]; then
-        nic_device="virtio-net-pci"
-    fi
-
-    QEMU_CMD+=(
-        # Network
-        -netdev "bridge,id=net0,br=${bridge}"
-        -device "${nic_device},netdev=net0,mac=${mac}"
-        # Display & VNC (varies by profile)
-        "${DISPLAY_ARGS[@]}"
-        # Devices
-        -device virtio-balloon-pci
-        -rtc base=localtime
-        # Boot order
-        -boot "order=dc,menu=on"
-        # Daemonize
-        -daemonize
-        -pidfile "${VM_DIR}/${vm_name}.pid"
-        -monitor "unix:${VM_DIR}/${vm_name}.mon,server,nowait"
-    )
-
-    "${QEMU_CMD[@]}" 2>"${VM_DIR}/${vm_name}.log" &
-
-    sleep 2
+    # Wait up to 10 s for the PID file (daemonize is async)
+    local waited=0
+    while [ $waited -lt 10 ]; do
+        [ -f "${VM_DIR}/${vm_name}.pid" ] && break
+        sleep 1
+        waited=$(( waited + 1 ))
+    done
 
     if [ -f "${VM_DIR}/${vm_name}.pid" ]; then
-        log "$vm_name started (PID: $(cat ${VM_DIR}/${vm_name}.pid))"
+        log "$vm_name started (PID: $(cat "${VM_DIR}/${vm_name}.pid"))"
     else
-        warn "$vm_name may have failed to start. Check ${VM_DIR}/${vm_name}.log"
+        warn "$vm_name failed to start. Last log lines:"
+        [ -f "${VM_DIR}/${vm_name}.log" ] && \
+            tail -5 "${VM_DIR}/${vm_name}.log" | sed 's/^/    /' || true
     fi
 }
 

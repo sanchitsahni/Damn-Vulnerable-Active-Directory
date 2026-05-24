@@ -1,0 +1,84 @@
+---
+# ==============================================================================
+# DVAD - Phase 4: Privilege Escalation on dc01.corp.local
+# Covers PE-018, PE-019, PE-057, PE-058, PE-059 surfaces — populates the
+# "Operators" built-in groups that have well-known SYSTEM paths on a DC, and
+# loosens GPO/SYSVOL DACLs so authenticated users can drop logon scripts.
+# Member of Backup Operators is already set in vuln-cred-access.yml (CRED-007).
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# PE-057: Server Operators -> SYSTEM (change service binPath on DC).
+# Put a low-priv user (developer1) in "Server Operators".
+# ------------------------------------------------------------------------------
+- name: PE-057 - Add developer1 to Server Operators
+  ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
+    try {
+      Add-ADGroupMember -Identity "Server Operators" -Members "developer1" -ErrorAction Stop
+    } catch { Write-Host "Server Operators membership: $($_.Exception.Message)" }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PE-058: Print Operators -> SYSTEM via signed-driver install on DC.
+# Put helpdesk in "Print Operators".
+# ------------------------------------------------------------------------------
+- name: PE-058 - Add helpdesk to Print Operators
+  ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
+    try {
+      Add-ADGroupMember -Identity "Print Operators" -Members "helpdesk" -ErrorAction Stop
+    } catch { Write-Host "Print Operators membership: $($_.Exception.Message)" }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PE-059: Backup Operators -> NTDS.dit theft. Membership already wired in
+# vuln-cred-access.yml (CRED-007). Verify only.
+# ------------------------------------------------------------------------------
+- name: PE-059 - Verify Backup Operators populated
+  ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
+    Get-ADGroupMember -Identity "Backup Operators" |
+      Select-Object Name, SamAccountName | Out-String
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PE-018: GPO application on insecure share. Loosen the Default Domain Policy
+# scripts folder so Authenticated Users can write logon-script payloads.
+# ------------------------------------------------------------------------------
+- name: PE-018 - Loosen SYSVOL GPO scripts folder DACL
+  ansible.windows.win_shell: |
+    $domain = (Get-ADDomain).DNSRoot
+    $gpoRoot = "C:\Windows\SYSVOL\sysvol\$domain\Policies"
+    if (Test-Path $gpoRoot) {
+      Get-ChildItem $gpoRoot -Directory | ForEach-Object {
+        $scripts = Join-Path $_.FullName "Machine\Scripts\Startup"
+        if (-not (Test-Path $scripts)) { New-Item -ItemType Directory -Path $scripts -Force | Out-Null }
+        icacls $scripts /grant "CORP\Authenticated Users:(OI)(CI)M" 2>$null | Out-Null
+      }
+    }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# PE-019: Backup Operators write to flag files via GPO. The Backup Operators
+# group will be able to read everything via SeBackupPrivilege; we just need
+# the flag staging dir to exist on the DC so the read path is interesting.
+# ------------------------------------------------------------------------------
+- name: PE-019 - Ensure DC flag staging exists for SeBackup read path
+  ansible.windows.win_file:
+    path: 'C:\Flags'
+    state: directory
+  ignore_errors: yes
+
+- name: PE-019 - Drop a SYSTEM-only flag for Backup Operators to extract
+  ansible.windows.win_copy:
+    dest: 'C:\Flags\dc-system-only.txt'
+    content: "FLAG{PE-019_BACKUP_OPERATORS_READ_PATH}"
+  ignore_errors: yes
+
+- name: PE-019 - Lock flag to SYSTEM only (Backup Operators bypass via SeBackup)
+  ansible.windows.win_shell: |
+    icacls "C:\Flags\dc-system-only.txt" /inheritance:r 2>$null | Out-Null
+    icacls "C:\Flags\dc-system-only.txt" /grant "NT AUTHORITY\SYSTEM:F" 2>$null | Out-Null
+    icacls "C:\Flags\dc-system-only.txt" /grant "BUILTIN\Administrators:F" 2>$null | Out-Null
+  ignore_errors: yes

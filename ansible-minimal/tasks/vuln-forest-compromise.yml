@@ -1,0 +1,479 @@
+---
+# ==============================================================================
+# DVAD - Phase 6: Domain/Forest Compromise (DF-001..DF-040)
+# Target: dc01.corp.local (DC-side preconditions) + cross-forest DCs.
+#
+# Many DF surfaces are runtime techniques (Golden/Silver/Diamond/Sapphire
+# ticket forgery, DCShadow, MS14-068, ZeroLogon, NoPac, Certifried) that need
+# the *preconditions* present but the actual exploit run by the participant.
+# Where a precondition is already wired earlier (DCSync rights in CRED-007,
+# krbtgt reset in PER-018, ADCS ESC templates in adcs_vulns role, trusts in
+# trust-setup.yml) we re-verify it here. New surfaces wired below.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# DF-001 / DF-040: Golden/Diamond/Sapphire ticket - krbtgt hash is the root key.
+# PER-018 already resets krbtgt to KrbtgtDVAD2024! for deterministic forgery.
+# Verify krbtgt account state here.
+# ------------------------------------------------------------------------------
+- name: DF-001 - Verify krbtgt account is enabled and has known password
+  ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
+    $k = Get-ADUser krbtgt -Properties Enabled,PasswordLastSet,whenChanged
+    Write-Host "krbtgt enabled=$($k.Enabled) lastSet=$($k.PasswordLastSet) whenChanged=$($k.whenChanged)"
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# DF-002: Silver Ticket - service account hash + SPN.
+# svc_sql / svc_web / svc_backup with weak Kerberoastable passwords already
+# wired in CRED-001..CRED-006. Ensure HOST and CIFS SPNs exist on FILE01$ so
+# Silver tickets for CIFS/HOST are forgeable once an attacker has the
+# computer account hash.
+# ------------------------------------------------------------------------------
+- name: DF-002 - Ensure FILE01 has HOST and CIFS SPNs (Silver ticket targets)
+  ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
+    $c = Get-ADComputer FILE01 -Properties servicePrincipalName
+    $spns = @('HOST/file01.corp.local','HOST/FILE01','CIFS/file01.corp.local','CIFS/FILE01')
+    foreach ($s in $spns) {
+      if ($c.servicePrincipalName -notcontains $s) {
+        Set-ADComputer FILE01 -ServicePrincipalNames @{Add=$s} -ErrorAction SilentlyContinue
+      }
+    }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# DF-003: DCSync All Hashes - Replicating Directory Changes / All / In Filtered
+# Set granted to sync_user in CRED-007. Re-verify here.
+# ------------------------------------------------------------------------------
+- name: DF-003 - Verify sync_user holds DCSync rights
+  ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
+    try {
+      $u = Get-ADUser sync_user -ErrorAction Stop
+      Write-Host "sync_user present: $($u.DistinguishedName)"
+    } catch { Write-Host "sync_user missing - check CRED-007" }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# DF-004: DCShadow - needs Domain Admin or specific extended rights.
+# Lab-injection: grant low-priv user (developer2) DS-Install-Replica + DS-
+# Replication-Manage-Topology on the domain naming context so DCShadow can
+# register a rogue DC.
+# ------------------------------------------------------------------------------
+- name: DF-004 - Grant developer2 replica/topology rights for DCShadow
+  ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
+    try {
+      $usr = Get-ADUser -Identity developer2 -ErrorAction Stop
+    } catch {
+      Write-Host "developer2 missing - skip DF-004"; return
+    }
+    $sid = New-Object System.Security.Principal.SecurityIdentifier $usr.SID
+    $domDn = (Get-ADDomain).DistinguishedName
+    $acl = Get-Acl "AD:\$domDn"
+    $rights = @{
+      'DS-Install-Replica'             = [guid]'9923a32a-3607-11d2-b9be-0000f87a36b2'
+      'DS-Replication-Manage-Topology' = [guid]'1131f6ac-9c07-11d1-f79f-00c04fc2dcd2'
+      'DS-Replication-Synchronize'     = [guid]'1131f6ab-9c07-11d1-f79f-00c04fc2dcd2'
+    }
+    foreach ($r in $rights.GetEnumerator()) {
+      $ace = New-Object System.DirectoryServices.ActiveDirectoryAccessRule(
+        $sid, 'ExtendedRight', 'Allow', $r.Value, 'None')
+      $acl.AddAccessRule($ace)
+    }
+    Set-Acl "AD:\$domDn" $acl
+    Write-Host "DCShadow extended rights granted to developer2"
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# DF-005 / DF-037: SID History injection - needs writable sIDHistory.
+# In a real forest you need DA on the source forest. Lab-injection: grant
+# developer2 the Reanimate-Tombstones + Migrate-SID-History extended rights
+# at the domain root.
+# ------------------------------------------------------------------------------
+- name: DF-005 - Grant developer2 Migrate-SID-History extended right
+  ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
+    try {
+      $usr = Get-ADUser developer2 -ErrorAction Stop
+    } catch {
+      Write-Host "developer2 missing - skip DF-005"; return
+    }
+    $sid = New-Object System.Security.Principal.SecurityIdentifier $usr.SID
+    $domDn = (Get-ADDomain).DistinguishedName
+    $acl = Get-Acl "AD:\$domDn"
+    $migrate = [guid]'ba33815a-4f93-4c76-87f3-57574bff8109'
+    $reanimate = [guid]'45ec5156-db7e-47bb-b53f-dbeb2d03c40f'
+    foreach ($g in @($migrate,$reanimate)) {
+      $ace = New-Object System.DirectoryServices.ActiveDirectoryAccessRule(
+        $sid, 'ExtendedRight', 'Allow', $g, 'None')
+      $acl.AddAccessRule($ace)
+    }
+    Set-Acl "AD:\$domDn" $acl
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# DF-006 / DF-037 / DF-040: Trust ticket forgery - needs the trust key.
+# The trust key is the password of the trusted-domain TDO object. Set the
+# trust keys to a known value so participants can forge inter-realm TGTs
+# without first DCSyncing.
+# ------------------------------------------------------------------------------
+- name: DF-006 - Reset trusted-domain account passwords to known lab value
+  ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
+    $pwd = ConvertTo-SecureString 'TrustKey2024!' -AsPlainText -Force
+    foreach ($t in @('finance.local$','root.corp$','eu.corp.local$')) {
+      try {
+        $obj = Get-ADUser -Filter "SamAccountName -eq '$t'" -ErrorAction Stop
+        if ($obj) {
+          Set-ADAccountPassword -Identity $obj.SamAccountName -NewPassword $pwd -Reset -ErrorAction Stop
+          Write-Host "Reset trust account: $t"
+        }
+      } catch { Write-Host "Trust account $t not present or not resettable: $($_.Exception.Message)" }
+    }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# DF-007: ExtraSID attack (Parent-Child) - child domain admin can forge TGT
+# with Enterprise Admin SID. Needs the child DC's krbtgt hash. Reset
+# eu.corp.local's krbtgt to a known value on the child DC.
+# ------------------------------------------------------------------------------
+- name: DF-007 - Reset child-domain krbtgt to known lab value
+  ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
+    $pwd = ConvertTo-SecureString 'KrbtgtEU2024!' -AsPlainText -Force
+    try {
+      Set-ADAccountPassword -Identity krbtgt -NewPassword $pwd -Reset -ErrorAction Stop
+      Write-Host "Child krbtgt reset for eu.corp.local"
+    } catch { Write-Host "Child krbtgt reset failed: $($_.Exception.Message)" }
+  delegate_to: dc01.eu.corp.local
+  run_once: yes
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# DF-008 / DF-023: SID filtering bypass.
+# Forest trusts default to SID filtering enabled. Disable it on the external
+# trusts so SID History injection actually crosses the boundary.
+# ------------------------------------------------------------------------------
+- name: DF-008 - Disable SID filtering (Quarantine) on cross-forest trusts
+  ansible.windows.win_shell: |
+    foreach ($t in @('finance.local','root.corp','eu.corp.local')) {
+      try {
+        & netdom.exe trust corp.local /domain:$t /quarantine:No 2>$null | Out-Null
+        & netdom.exe trust corp.local /domain:$t /enablesidhistory:Yes 2>$null | Out-Null
+        Write-Host "SID filtering disabled on trust: $t"
+      } catch { Write-Host "netdom on $t : $($_.Exception.Message)" }
+    }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# DF-009: Foreign Security Principal hijack.
+# Add the finance.local Administrator FSP into corp.local Domain Admins so
+# the foreign DA membership is the win condition.
+# ------------------------------------------------------------------------------
+- name: DF-009 - Add FINANCE\Administrator as FSP in CORP Domain Admins
+  ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
+    try {
+      $finAdmin = New-Object System.Security.Principal.NTAccount('FINANCE','Administrator')
+      $sid = $finAdmin.Translate([System.Security.Principal.SecurityIdentifier]).Value
+      $domDn = (Get-ADDomain).DistinguishedName
+      $fspDn = "CN=$sid,CN=ForeignSecurityPrincipals,$domDn"
+      if (-not (Get-ADObject -Filter "objectClass -eq 'foreignSecurityPrincipal' -and Name -eq '$sid'" -ErrorAction SilentlyContinue)) {
+        New-ADObject -Name $sid -Type foreignSecurityPrincipal -Path "CN=ForeignSecurityPrincipals,$domDn" -ErrorAction SilentlyContinue
+      }
+      Add-ADGroupMember -Identity 'Domain Admins' -Members $fspDn -ErrorAction SilentlyContinue
+      Write-Host "FSP $sid added to Domain Admins"
+    } catch { Write-Host "FSP hijack: $($_.Exception.Message)" }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# DF-010: Cross-forest Kerberoasting - set an SPN on a foreign-trust-reachable
+# service account with a weak password. Already partially covered by svc_sql
+# in CRED. Add an SPN that's specifically reachable from finance.local.
+# ------------------------------------------------------------------------------
+- name: DF-010 - Add cross-forest-reachable SPN to svc_sql
+  ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
+    try {
+      Set-ADUser -Identity svc_sql -ServicePrincipalNames @{Add='MSSQLSvc/sql01.corp.local:1433','MSSQLSvc/sql01.corp.local'} -ErrorAction SilentlyContinue
+    } catch { Write-Host "SPN add: $($_.Exception.Message)" }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# DF-011..DF-022, DF-031..DF-034: ADCS ESC1..ESC11, ESC13..ESC16.
+# Wired in roles/adcs_vulns/tasks/main.yml and tasks/vuln-adcs-esc.yml.
+# Reinforce CA-wide ESC6 / ESC16 (DisableExtensionList).
+# ------------------------------------------------------------------------------
+- name: DF-017/034 - Reinforce ESC6 / ESC16 on the CA registry
+  ansible.windows.win_shell: |
+    & certutil.exe -setreg policy\EditFlags +EDITF_ATTRIBUTESUBJECTALTNAME2 2>$null | Out-Null
+    # ESC16: DisableExtensionList includes szOID_NTDS_CA_SECURITY_EXT (1.3.6.1.4.1.311.25.2)
+    try {
+      $caKey = 'HKLM:\SYSTEM\CurrentControlSet\Services\CertSvc\Configuration'
+      $caName = (Get-ChildItem $caKey -ErrorAction SilentlyContinue | Select-Object -First 1).PSChildName
+      if ($caName) {
+        $polKey = "$caKey\$caName\PolicyModules\CertificateAuthority_MicrosoftDefault.Policy"
+        $current = (Get-ItemProperty -Path $polKey -Name 'DisableExtensionList' -ErrorAction SilentlyContinue).DisableExtensionList
+        $oid = '1.3.6.1.4.1.311.25.2'
+        $new = @()
+        if ($current) { $new += $current }
+        if ($new -notcontains $oid) { $new += $oid }
+        Set-ItemProperty -Path $polKey -Name 'DisableExtensionList' -Value $new -Type MultiString -ErrorAction SilentlyContinue
+      }
+      Restart-Service certsvc -ErrorAction SilentlyContinue
+    } catch { Write-Host "ESC16: $($_.Exception.Message)" }
+  delegate_to: ca01.corp.local
+  run_once: yes
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# DF-024 / DF-027: noPac (CVE-2021-42278/42287). Needs MachineAccountQuota > 0
+# (default 10) - already PER-default. Also needs an unpatched DC; gold image
+# is whatever Massgrave activates. We just ensure MAQ stays at 10.
+# ------------------------------------------------------------------------------
+- name: DF-024 - Verify ms-DS-MachineAccountQuota is 10
+  ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
+    $domDn = (Get-ADDomain).DistinguishedName
+    Set-ADDomain -Identity (Get-ADDomain) -Replace @{'ms-DS-MachineAccountQuota'=10} -ErrorAction SilentlyContinue
+    $maq = (Get-ADObject -Identity $domDn -Properties 'ms-DS-MachineAccountQuota').'ms-DS-MachineAccountQuota'
+    Write-Host "MachineAccountQuota = $maq"
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# DF-025: Certifried (CVE-2022-26923) - needs ADCS web enrollment + ability to
+# write dNSHostName. With MAQ=10 a domain user can create a computer account
+# and control its dNSHostName. Verify Domain Computers can self-modify
+# dNSHostName (default) and that ADCS Machine template is enabled (set up in
+# adcs_vulns role).
+# ------------------------------------------------------------------------------
+- name: DF-025 - Confirm Machine template is published (Certifried target)
+  ansible.windows.win_shell: |
+    try {
+      $t = certutil -CATemplates 2>$null | Out-String
+      Write-Host $t
+    } catch { Write-Host "certutil enum: $($_.Exception.Message)" }
+  delegate_to: ca01.corp.local
+  run_once: yes
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# DF-028: Read Only DC abuse - PRP. We do not stand up an RODC by default.
+# Marker-only.
+# ------------------------------------------------------------------------------
+- name: DF-028 - RODC PRP abuse (no RODC in lab by default - marker only)
+  ansible.windows.win_shell: |
+    Write-Host "DF-028: RODC not deployed by default. Stand up RODC manually to exercise."
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# DF-029: GPO delegation to a low-priv group.
+# Grant developer1 GPO edit rights on the Default Domain Policy.
+# ------------------------------------------------------------------------------
+- name: DF-029 - Delegate GPO edit on Default Domain Policy to developer1
+  ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
+    Import-Module GroupPolicy
+    try {
+      $gpo = Get-GPO -Name 'Default Domain Policy' -ErrorAction Stop
+      Set-GPPermission -Name 'Default Domain Policy' -PermissionLevel GpoEditDeleteModifySecurity -TargetName 'developer1' -TargetType User -ErrorAction SilentlyContinue
+      Write-Host "developer1 granted GPO edit on Default Domain Policy"
+    } catch { Write-Host "GPO delegation: $($_.Exception.Message)" }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# DF-030: Schema Admin hijack - put helpdesk in Schema Admins (only valid
+# group in the forest root). Needed for malicious schema attribute extension.
+# ------------------------------------------------------------------------------
+- name: DF-030 - Add helpdesk to Schema Admins
+  ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
+    try {
+      Add-ADGroupMember -Identity 'Schema Admins' -Members 'helpdesk' -ErrorAction Stop
+      Write-Host "helpdesk added to Schema Admins"
+    } catch { Write-Host "Schema Admins add: $($_.Exception.Message)" }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# DF-031: ESC13 - Issuance Policy OID linked to a privileged group.
+# Create an OID-to-group link to 'Domain Admins' via msDS-OIDToGroupLink.
+# ------------------------------------------------------------------------------
+- name: DF-031 - ESC13 - Create OID-to-group link to Domain Admins
+  ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
+    $oidContainer = "CN=OID,CN=Public Key Services,CN=Services,CN=Configuration,$((Get-ADDomain).DistinguishedName)"
+    try {
+      $da = Get-ADGroup 'Domain Admins'
+      $oidName = 'DVAD-ESC13-OID'
+      if (-not (Get-ADObject -Filter "Name -eq '$oidName'" -SearchBase $oidContainer -ErrorAction SilentlyContinue)) {
+        New-ADObject -Name $oidName -Type 'msPKI-Enterprise-Oid' -Path $oidContainer `
+          -OtherAttributes @{
+            'msPKI-Cert-Template-OID' = '1.3.6.1.4.1.311.21.8.1.1.1.1.1';
+            'msDS-OIDToGroupLink'     = $da.DistinguishedName;
+            'msPKI-OID-Attribute'     = 2;
+            'displayName'             = 'DVAD ESC13 Linked OID'
+          } -ErrorAction SilentlyContinue
+        Write-Host "ESC13 OID created and linked to Domain Admins"
+      }
+    } catch { Write-Host "ESC13: $($_.Exception.Message)" }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# DF-032: ESC14 - Explicit cert mapping via altSecurityIdentities.
+# Grant developer1 WriteProperty on altSecurityIdentities of Administrator so
+# developer1 can drop an explicit cert mapping pointing at any cert.
+# ------------------------------------------------------------------------------
+- name: DF-032 - ESC14 - Grant developer1 WriteProperty on Administrator.altSecurityIdentities
+  ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
+    try {
+      $usr = Get-ADUser -Identity developer1 -ErrorAction Stop
+      $sid = New-Object System.Security.Principal.SecurityIdentifier $usr.SID
+      $target = Get-ADUser -Identity Administrator
+      $acl = Get-Acl "AD:\$($target.DistinguishedName)"
+      $altSecGuid = [guid]'00fbf30c-91fe-11d1-aebc-0000f80367c1'
+      $ace = New-Object System.DirectoryServices.ActiveDirectoryAccessRule(
+        $sid,'WriteProperty','Allow',$altSecGuid,'None')
+      $acl.AddAccessRule($ace)
+      Set-Acl "AD:\$($target.DistinguishedName)" $acl
+      Write-Host "ESC14: developer1 can write altSecurityIdentities on Administrator"
+    } catch { Write-Host "ESC14: $($_.Exception.Message)" }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# DF-033: ESC15 (EKUwu / CVE-2024-49019). Needs a Schema v1 template enrollable
+# by Domain Users. Publish WebServer (schema v1) for everyone.
+# ------------------------------------------------------------------------------
+- name: DF-033 - ESC15 - Allow Domain Users to enroll WebServer (schema v1)
+  ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
+    $domDn = (Get-ADDomain).DistinguishedName
+    $tplDn = "CN=WebServer,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,$domDn"
+    try {
+      $du = Get-ADGroup 'Domain Users'
+      $sid = New-Object System.Security.Principal.SecurityIdentifier $du.SID
+      $acl = Get-Acl "AD:\$tplDn"
+      $enrollGuid = [guid]'0e10c968-78fb-11d2-90d4-00c04f79dc55'
+      $ace = New-Object System.DirectoryServices.ActiveDirectoryAccessRule(
+        $sid,'ExtendedRight','Allow',$enrollGuid,'None')
+      $acl.AddAccessRule($ace)
+      Set-Acl "AD:\$tplDn" $acl
+    } catch { Write-Host "ESC15: $($_.Exception.Message)" }
+    try { & certutil.exe -SetCATemplates +WebServer 2>$null | Out-Null } catch {}
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# DF-035: ZeroLogon (CVE-2020-1472). Requires unpatched DC + Netlogon allowing
+# vulnerable secure channel. Patch level is whatever Massgrave activates.
+# Set Netlogon FullSecureChannelProtection=0 so ZeroLogon is reachable.
+# WARNING: this breaks replication if you actually exploit it.
+# ------------------------------------------------------------------------------
+- name: DF-035 - Disable Netlogon FullSecureChannelProtection (ZeroLogon precondition)
+  ansible.windows.win_regedit:
+    path: 'HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters'
+    name: FullSecureChannelProtection
+    data: 0
+    type: dword
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# DF-036: MS14-068. Patch-state dependent. Marker only.
+# ------------------------------------------------------------------------------
+- name: DF-036 - MS14-068 PAC forgery (patch-state marker)
+  ansible.windows.win_shell: |
+    Write-Host "DF-036: MS14-068 depends on unpatched KDC. Lab gold image may or may not be vulnerable."
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# DF-038: Foreign group membership escalation. Add FINANCE\helpdesk into a
+# corp.local group that has interesting rights (Server Operators from PE-057).
+# ------------------------------------------------------------------------------
+- name: DF-038 - Cross-forest FSP into corp.local Server Operators
+  ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
+    try {
+      $finHd = New-Object System.Security.Principal.NTAccount('FINANCE','helpdesk')
+      $sid = $finHd.Translate([System.Security.Principal.SecurityIdentifier]).Value
+      $domDn = (Get-ADDomain).DistinguishedName
+      $fspDn = "CN=$sid,CN=ForeignSecurityPrincipals,$domDn"
+      if (-not (Get-ADObject -Filter "objectClass -eq 'foreignSecurityPrincipal' -and Name -eq '$sid'" -ErrorAction SilentlyContinue)) {
+        New-ADObject -Name $sid -Type foreignSecurityPrincipal -Path "CN=ForeignSecurityPrincipals,$domDn" -ErrorAction SilentlyContinue
+      }
+      Add-ADGroupMember -Identity 'Server Operators' -Members $fspDn -ErrorAction SilentlyContinue
+      Write-Host "FINANCE\helpdesk FSP added to corp.local Server Operators"
+    } catch { Write-Host "DF-038 FSP: $($_.Exception.Message)" }
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# DF-039: SCCM Site Takeover. Out of scope for default lab (no SCCM site
+# deployed). Marker only.
+# ------------------------------------------------------------------------------
+- name: DF-039 - SCCM site takeover (out of scope - marker)
+  ansible.windows.win_shell: |
+    Write-Host "DF-039: SCCM not deployed. Stand up a CM site manually to exercise."
+  ignore_errors: yes
+
+# ------------------------------------------------------------------------------
+# Flag staging for the forest-compromise tier
+# ------------------------------------------------------------------------------
+- name: DF flag staging - directory
+  ansible.windows.win_file:
+    path: 'C:\Flags\forest'
+    state: directory
+  ignore_errors: yes
+
+- name: DF-001 - Golden ticket capture flag
+  ansible.windows.win_copy:
+    dest: 'C:\Flags\forest\df-001-golden.txt'
+    content: |
+      FLAG{DF-001_GOLDEN_TICKET_KRBTGT_FORGED}
+      Hint: krbtgt was reset in PER-018. Hash is deterministic.
+  ignore_errors: yes
+
+- name: DF-003 - DCSync flag
+  ansible.windows.win_copy:
+    dest: 'C:\Flags\forest\df-003-dcsync.txt'
+    content: |
+      FLAG{DF-003_DCSYNC_ALL_HASHES}
+      Hint: sync_user holds Replicating Directory Changes.
+  ignore_errors: yes
+
+- name: DF-005 - SID History flag
+  ansible.windows.win_copy:
+    dest: 'C:\Flags\forest\df-005-sidhistory.txt'
+    content: |
+      FLAG{DF-005_SID_HISTORY_INJECTION}
+      Hint: developer2 holds Migrate-SID-History extended right.
+  ignore_errors: yes
+
+- name: DF-008 - SID filtering bypass flag
+  ansible.windows.win_copy:
+    dest: 'C:\Flags\forest\df-008-sidfilter.txt'
+    content: |
+      FLAG{DF-008_SID_FILTERING_DISABLED}
+      Hint: Quarantine disabled on cross-forest trusts.
+  ignore_errors: yes
+
+- name: DF-009 - FSP hijack flag
+  ansible.windows.win_copy:
+    dest: 'C:\Flags\forest\df-009-fsp.txt'
+    content: |
+      FLAG{DF-009_FSP_HIJACK_DOMAIN_ADMINS}
+      Hint: FINANCE\Administrator is now a corp.local Domain Admin.
+  ignore_errors: yes
+
+- name: DF-035 - ZeroLogon precondition flag
+  ansible.windows.win_copy:
+    dest: 'C:\Flags\forest\df-035-zerologon.txt'
+    content: |
+      FLAG{DF-035_ZEROLOGON_PRECONDITION}
+      Hint: FullSecureChannelProtection=0 on Netlogon.
+  ignore_errors: yes
+
+- name: Lock forest flag dir to SYSTEM/Admins
+  ansible.windows.win_shell: |
+    icacls "C:\Flags\forest" /inheritance:r 2>$null | Out-Null
+    icacls "C:\Flags\forest" /grant "NT AUTHORITY\SYSTEM:(OI)(CI)F" "BUILTIN\Administrators:(OI)(CI)F" 2>$null | Out-Null
+  ignore_errors: yes

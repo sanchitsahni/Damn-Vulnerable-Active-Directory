@@ -1,0 +1,17 @@
+---
+# ==============================================================================
+# DVAD - CTF Flag Deployment
+# Pass-through wrapper: the authoritative manifest is now in
+# roles/flag_factory/vars/main.yml. This file only ensures the directories
+# exist; the role does the per-host flag drop with proper ACLs.
+# ==============================================================================
+
+- name: Ensure CTF directories exist
+  ansible.windows.win_file:
+    path: "{{ item }}"
+    state: directory
+  loop:
+    - "{{ flag_dir | default('C:\\Flags') }}"
+    - "{{ ctf_dir  | default('C:\\CTF') }}"
+    - "{{ (ctf_dir | default('C:\\CTF')) ~ '\\logs' }}"
+  ignore_errors: yes

@@ -149,7 +149,7 @@ download_windows_media() {
 # ==============================================================================
 convert_master_template() {
     local vhd_file="${CFG_MEDIA_PATH}/windows-server-2022-eval.vhd"
-    local base_qcow2="${CFG_MEDIA_PATH}/windows-server-2022-base.qcow2"
+    local base_qcow2="${CFG_MEDIA_PATH}/win2k25.qcow2"
 
     if [ ! -f "$base_qcow2" ]; then
         log "Converting VHD to QCOW2 master template (this takes a few minutes)..."
@@ -199,7 +199,20 @@ activate_windows() {
 # ==============================================================================
 run_ansible() {
     log "Running Ansible playbooks for AD provisioning and vulnerability injection..."
-    cd "${DVAD_HOME}/ansible"
+    
+    local ansible_dir="${DVAD_HOME}/ansible"
+    if [ "$CFG_DEPLOY_MODE" = "single-dc" ]; then
+        ansible_dir="${DVAD_HOME}/ansible-single-dc"
+        log "Mode: single-dc. Using ${ansible_dir}"
+    elif [ "$CFG_DEPLOY_MODE" = "minimal" ]; then
+        ansible_dir="${DVAD_HOME}/ansible-minimal"
+        log "Mode: minimal. Using ${ansible_dir}"
+    else
+        ansible_dir="${DVAD_HOME}/ansible-full"
+        log "Mode: full. Using ${ansible_dir}"
+    fi
+
+    cd "$ansible_dir"
     ansible-playbook -i inventory.yml playbooks/site.yml -v
     log "Ansible provisioning complete."
 }
@@ -281,6 +294,8 @@ EOF
     install_dependencies
     check_kvm
     setup_networks
+    download_windows_media
+    convert_master_template
     create_vms
     wait_for_vms
     run_ansible

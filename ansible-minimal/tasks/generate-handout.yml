@@ -1,0 +1,25 @@
+---
+# ==============================================================================
+# DVAD - Generate Participant Handout
+# Target: ws01.corp.local
+# ==============================================================================
+
+- name: Create handout directory
+  win_file:
+    path: 'C:\DVAD\handout'
+    state: directory
+
+- name: Copy CTF handout document
+  win_copy:
+    src: ctf-handout.txt
+    dest: 'C:\DVAD\handout\CTF-Handout.txt'
+
+- name: Copy quick reference card
+  win_copy:
+    src: quick-ref.txt
+    dest: 'C:\DVAD\handout\Quick-Ref.txt'
+
+- name: Announce handout location
+  win_shell: |
+    Write-Host "Handout generated: C:\DVAD\handout\CTF-Handout.txt"
+  ignore_errors: yes

@@ -1,0 +1,60 @@
+---
+# ==============================================================================
+# DVAD - flag_factory role
+# Drops one flag file per matrix ID assigned to the current host.
+# Manifest lives in roles/flag_factory/vars/main.yml.
+# ==============================================================================
+
+- name: Compute flags scoped to this host
+  set_fact:
+    host_flags: "{{ flag_manifest | selectattr('host','equalto',inventory_hostname) | list }}"
+
+- name: Skip host if no flags assigned
+  meta: end_host
+  when: host_flags | length == 0
+
+- name: Ensure flag directories exist
+  ansible.windows.win_file:
+    path: "{{ item }}"
+    state: directory
+  loop:
+    - "{{ flag_dir }}"
+    - "{{ ctf_dir }}"
+    - "{{ ctf_dir }}\\logs"
+
+- name: Write per-host flag manifest as JSON
+  ansible.windows.win_copy:
+    dest: "{{ ctf_dir }}\\flags.json"
+    content: "{{ host_flags | to_nice_json }}"
+
+- name: Drop flag files (one per matrix ID)
+  ansible.windows.win_shell: |
+    $flags = Get-Content '{{ ctf_dir }}\flags.json' | ConvertFrom-Json
+    foreach ($f in $flags) {
+      $path = "{{ flag_dir }}\FLAG-$($f.id)-$($f.cat).txt"
+      $guid = [guid]::NewGuid().ToString()
+      $body = "FLAG{$($f.id)_$( $f.cat.ToUpper() )} $($f.desc) | $guid"
+      Set-Content -Path $path -Value $body -Encoding ASCII -Force
+
+      # Strip inherited ACEs and grant the minimum the acl tier requires.
+      try { & icacls.exe $path /inheritance:r 2>$null | Out-Null } catch {}
+      try { & icacls.exe $path /grant 'NT AUTHORITY\SYSTEM:F' 2>$null | Out-Null } catch {}
+      try { & icacls.exe $path /grant 'BUILTIN\Administrators:F' 2>$null | Out-Null } catch {}
+
+      switch ($f.acl) {
+        'system_only' {
+          # SYSTEM + Admins only - no further grants.
+        }
+        'admins' {
+          # Same as system_only for our purposes (Admins already granted).
+        }
+        'domain_users' {
+          try { & icacls.exe $path /grant 'NT AUTHORITY\Authenticated Users:R' 2>$null | Out-Null } catch {}
+        }
+        'everyone' {
+          try { & icacls.exe $path /grant 'Everyone:R' 2>$null | Out-Null } catch {}
+        }
+      }
+    }
+    Write-Host "Wrote $($flags.Count) flag files on $(hostname)."
+  ignore_errors: yes

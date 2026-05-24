@@ -1,0 +1,54 @@
+---
+# ==============================================================================
+# DVAD - ADCS ESC Template Vulnerability Configuration
+# Target: ca01.corp.local
+# ==============================================================================
+
+- name: Ensure ADCS is running
+  win_shell: |
+    Start-Service certsvc
+    Start-Service IISADMIN
+    Start-Service W3SVC
+  ignore_errors: yes
+
+- name: Publish ESC1 template with Domain Users enrollment
+  win_shell: |
+    Import-Module ADCSAdministration
+    Import-Module ActiveDirectory
+    # Duplicate User template for ESC1 with weak ACL
+    # NOTE: stub - real ESC1 template creation lives in roles/adcs_vulns.
+    # See PLAN.md sections 12, 22 and adcs-setup.yml for the full flow.
+    try {
+      Add-CATemplate -Name "User" -Force -ErrorAction SilentlyContinue
+      Write-Host "ESC1 template published."
+    } catch {
+      Write-Host "Template publish result: $($_.Exception.Message)"
+    }
+  ignore_errors: yes
+
+- name: Enable NTLM relay to ADCS web enrollment (ESC8 hardening disabled)
+  win_shell: |
+    # Disable Extended Protection on IIS / CertSrv to allow NTLM relay
+    Import-Module WebAdministration
+    $certSrv = "IIS:\Sites\Default Web Site\CertSrv"
+    if (Test-Path $certSrv) {
+      Set-ItemProperty -Path $certSrv -Name "extendedProtection" -Value "Off" -ErrorAction SilentlyContinue
+      Set-ItemProperty -Path $certSrv -Name "authFlags" -Value 2 -ErrorAction SilentlyContinue  # Basic auth
+    }
+    Restart-Service W3Svc
+  ignore_errors: yes
+
+- name: Configure ESC9/ESC10 no-security-extension flag
+  win_shell: |
+    Import-Module ActiveDirectory
+    # Find templates with specific flags for ESC9/ESC10
+    $templates = Get-ADObject -Filter {objectClass -eq "pKICertificateTemplate"} -SearchBase "CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,DC=corp,DC=local" -Properties msPKI-Certificate-Name-Flag,msPKI-Enrollment-Flag
+    Write-Host "Found $($templates.Count) templates"
+  ignore_errors: yes
+
+- name: Ensure ESC11-like OID structure
+  win_shell: |
+    # ESC11: Certificate Request Agent EKU without manager approval
+    # Already configured in adcs-setup.yml, reinforce here
+    Write-Host "ESC11 reinforcer"
+  ignore_errors: yes

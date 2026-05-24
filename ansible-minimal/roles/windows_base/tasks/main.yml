@@ -1,0 +1,36 @@
+---
+- name: Install required Windows features
+  ansible.windows.win_feature:
+    name:
+      - RSAT
+      - RSAT-AD-PowerShell
+      - RSAT-DNS-Server
+      - PowerShell
+      - Net-Framework-45-Core
+    state: present
+    include_management_tools: yes
+  register: feature_install
+
+- name: Reboot if features required it
+  ansible.windows.win_reboot:
+  when: feature_install.reboot_required
+
+- name: Configure WinRM for Ansible
+  ansible.windows.win_shell: |
+    Set-Item -Path WSMan:\localhost\MaxTimeoutms -Value 1800000
+    Set-Item -Path WSMan:\localhost\Service\AllowUnencrypted -Value $true
+    Set-Item -Path WSMan:\localhost\Service\Auth\Basic -Value $true
+    Set-Item -Path WSMan:\localhost\Service\Auth\Kerberos -Value $true
+    Set-Item -Path WSMan:\localhost\Service\Auth\Negotiate -Value $true
+    Set-Item -Path WSMan:\localhost\Service\Auth\CredSSP -Value $true
+
+
+
+- name: Set timezone to UTC
+  ansible.windows.win_timezone:
+    timezone: UTC
+
+- name: Enable RDP
+  ansible.windows.win_shell: |
+    Set-ItemProperty -Path 'HKLM:\\System\\CurrentControlSet\\Control\\Terminal Server' -name "fDenyTSConnections" -value 0
+    Enable-NetFirewallRule -DisplayGroup "Remote Desktop"

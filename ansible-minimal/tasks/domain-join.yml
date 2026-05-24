@@ -1,0 +1,79 @@
+---
+# ==============================================================================
+# DVAD - Domain Join for Member Servers
+# Target: ca01, file01, sql01, ws01
+# ==============================================================================
+
+- name: Set static IP and DNS for corp member servers
+  win_shell: |
+    Start-Sleep -Seconds 5
+    $adapter = Get-NetAdapter | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
+    $ip = "{{ ansible_host }}"
+    $prefix = 21
+    $gateway = "10.10.0.1"
+    $dns = "10.10.0.10"
+    netsh interface ip set address "$($adapter.Name)" static $ip 255.255.248.0 $gateway 1
+    netsh interface ip set dns "$($adapter.Name)" static $dns
+    Write-Host "IP configured: $ip/21"
+  async: 20
+  poll: 0
+
+- name: Wait for background IP change to drop the network adapter
+  pause:
+    seconds: 15
+
+- name: Wait for network to stabilize
+  wait_for_connection:
+    timeout: 60
+
+- name: Reset WinRM connection to clear stale sockets
+  meta: reset_connection
+
+- name: Set hostname from short name
+  win_hostname:
+    name: "{{ inventory_hostname.split('.')[0] | upper }}"
+  register: hostname_result
+
+- name: Reboot if hostname changed
+  win_reboot:
+  when: hostname_result.reboot_required
+
+- name: Wait for host
+  wait_for_connection:
+    delay: 30
+    timeout: 300
+
+- name: Wait for CORP.LOCAL AD DS to be fully online and responsive
+  win_shell: |
+    Write-Host "Waiting for 10.10.0.10 to open LDAP port..."
+    while ($true) {
+        $tcp = Test-NetConnection -ComputerName 10.10.0.10 -Port 389 -WarningAction SilentlyContinue
+        if ($tcp.TcpTestSucceeded) {
+            Write-Host "LDAP is UP! Giving AD DS 30 extra seconds to stabilize..."
+            Start-Sleep -Seconds 30
+            break
+        }
+        Start-Sleep -Seconds 15
+    }
+  timeout: 900
+
+- name: Join corp.local domain
+  microsoft.ad.membership:
+    dns_domain_name: corp.local
+    hostname: "{{ inventory_hostname.split('.')[0] | upper }}"
+    domain_admin_user: CORP\Administrator
+    domain_admin_password: "DVADlab2024!"
+    state: domain
+    reboot: false
+  register: domain_join
+
+- name: Reboot after domain join
+  win_reboot:
+    reboot_timeout: 600
+  when: domain_join.reboot_required | default(false)
+
+- name: Wait for domain join to complete
+  wait_for_connection:
+    delay: 45
+    timeout: 600
+  when: domain_join.reboot_required

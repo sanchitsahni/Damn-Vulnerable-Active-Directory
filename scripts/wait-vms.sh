@@ -1,120 +1,128 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # DVAD - Wait for VM Readiness
-# Polls VMs until Windows installation completes
+# Polls each VM's WinRM port until all are answering or timeout expires.
+# Since VMs boot from a pre-built QCOW2 (WinRM already enabled), this
+# should complete within 3-5 minutes of QEMU start.
 # ==============================================================================
 set -euo pipefail
 
 DVAD_HOME="${DVAD_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 VM_DIR="${CFG_DISK_PATH:-${DVAD_HOME}/vms}"
-MAX_WAIT_MINUTES=45
-POLL_INTERVAL=60
+MAX_WAIT_MINUTES="${MAX_WAIT_MINUTES:-30}"
+POLL_INTERVAL=20
 
 log()  { echo -e "\033[0;32m[+]\033[0m $*"; }
 warn() { echo -e "\033[1;33m[!]\033[0m $*"; }
 info() { echo -e "\033[0;34m[*]\033[0m $*"; }
 
-check_vm_ready() {
+# Static IP map (mirrors AGENTS.md topology)
+declare -A VM_IPS=(
+    ["dc01-corp"]="10.10.0.10"
+    ["dc01-eu"]="10.10.0.11"
+    ["ca01"]="10.10.0.12"
+    ["file01"]="10.10.0.13"
+    ["sql01"]="10.10.0.14"
+    ["ws01"]="10.10.0.100"
+    ["dc01-fin"]="10.20.0.10"
+    ["dc01-root"]="10.30.0.10"
+)
+
+# ─── Helpers ──────────────────────────────────────────────────────────────────
+
+qemu_pid_alive() {
     local vm_name="$1"
-
-    if ! [ -f "${VM_DIR}/${vm_name}.pid" ]; then
-        warn "$vm_name: No PID file. VM not running."
-        return 1
-    fi
-
-    local pid
-    pid=$(cat "${VM_DIR}/${vm_name}.pid")
-    if ! kill -0 "$pid" 2>/dev/null; then
-        warn "$vm_name: Process $pid not found. VM may have crashed."
-        return 1
-    fi
-
-    local ip=""
-    case "$vm_name" in
-        "dc01-corp") ip="10.10.0.10" ;;
-        "dc01-eu")   ip="10.10.0.11" ;;
-        "ca01")      ip="10.10.0.12" ;;
-        "file01")    ip="10.10.0.13" ;;
-        "sql01")     ip="10.10.0.14" ;;
-        "ws01")      ip="10.10.0.100" ;;
-        "dc01-fin")  ip="10.20.0.10" ;;
-        "dc01-root") ip="10.30.0.10" ;;
-    esac
-
-    if [ -n "$ip" ]; then
-        if nc -z -w 2 "$ip" 5985 2>/dev/null; then
-            info "$vm_name ($ip): WinRM port 5985 is OPEN! VM is ready."
+    # Check pid file first
+    if [ -f "${VM_DIR}/${vm_name}.pid" ]; then
+        local pid
+        pid=$(cat "${VM_DIR}/${vm_name}.pid" 2>/dev/null || echo "")
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
             return 0
         fi
     fi
-
-    return 1
+    # Fallback: check by process name
+    pgrep -f "qemu-system.*${vm_name}" &>/dev/null
 }
 
-wait_for_all() {
-    local vm_count=0
-    local ready_count=0
+winrm_open() {
+    local ip="$1"
+    nc -z -w 2 "$ip" 5985 2>/dev/null
+}
 
-    # Count VMs
-    for pidfile in "${VM_DIR}"/*.pid; do
-        [ -f "$pidfile" ] || continue
-        vm_count=$((vm_count + 1))
+# ─── Main wait loop ───────────────────────────────────────────────────────────
+
+wait_for_all() {
+    # Collect the list of VMs that have a .pid or .qcow2 in VM_DIR
+    local all_vms=()
+    for vm_name in "${!VM_IPS[@]}"; do
+        if [ -f "${VM_DIR}/${vm_name}.qcow2" ] || [ -f "${VM_DIR}/${vm_name}.pid" ]; then
+            all_vms+=("$vm_name")
+        fi
     done
 
-    if [ "$vm_count" -eq 0 ]; then
-        warn "No running VMs found in ${VM_DIR}"
+    if [ ${#all_vms[@]} -eq 0 ]; then
+        warn "No DVAD VM disks found in ${VM_DIR}. Did create_all_vms run?"
         return 0
     fi
 
-    info "Waiting for $vm_count VMs to complete Windows installation..."
-    info "This can take 20-45 minutes depending on hardware."
-    info ""
-
+    local vm_count=${#all_vms[@]}
+    local max_seconds=$(( MAX_WAIT_MINUTES * 60 ))
     local start_time
     start_time=$(date +%s)
-    local max_seconds=$((MAX_WAIT_MINUTES * 60))
+
+    info "Waiting for $vm_count VM(s) to respond on WinRM :5985 (max ${MAX_WAIT_MINUTES} min)..."
+    info "VMs: ${all_vms[*]}"
 
     while true; do
-        ready_count=0
+        local ready_count=0
+        local dead_count=0
 
-        for pidfile in "${VM_DIR}"/*.pid; do
-            [ -f "$pidfile" ] || continue
-            local vm_name
-            vm_name=$(basename "$pidfile" .pid)
-            local vnc=""
+        for vm_name in "${all_vms[@]}"; do
+            local ip="${VM_IPS[$vm_name]:-}"
 
-            if check_vm_ready "$vm_name" "$vnc"; then
-                ready_count=$((ready_count + 1))
-                if ! [ -f "${VM_DIR}/${vm_name}.installed" ]; then
+            # Stamp .installed if QEMU is alive (disk-boot approach)
+            if qemu_pid_alive "$vm_name" && [ ! -f "${VM_DIR}/${vm_name}.installed" ]; then
+                touch "${VM_DIR}/${vm_name}.installed"
+            fi
+
+            if [ -z "$ip" ]; then
+                ready_count=$(( ready_count + 1 ))   # no IP mapping → skip
+                continue
+            fi
+
+            if winrm_open "$ip"; then
+                if [ ! -f "${VM_DIR}/${vm_name}.installed" ]; then
                     touch "${VM_DIR}/${vm_name}.installed"
-                    log "$vm_name -> READY"
+                    log "$vm_name ($ip) → WinRM OPEN — marked ready"
+                else
+                    log "$vm_name ($ip) → WinRM OPEN"
                 fi
+                ready_count=$(( ready_count + 1 ))
+            elif ! qemu_pid_alive "$vm_name"; then
+                warn "$vm_name: QEMU process not running — check ${VM_DIR}/${vm_name}.log"
+                dead_count=$(( dead_count + 1 ))
+                ready_count=$(( ready_count + 1 ))  # count as done (failed)
             fi
         done
 
-        local elapsed
-        elapsed=$(($(date +%s) - start_time))
+        local elapsed=$(( $(date +%s) - start_time ))
 
         if [ "$ready_count" -ge "$vm_count" ]; then
-            log "All $vm_count VMs are ready! (${elapsed}s elapsed)"
+            log "All $vm_count VM(s) processed in ${elapsed}s."
             return 0
         fi
 
         if [ "$elapsed" -ge "$max_seconds" ]; then
-            warn "Timeout after ${MAX_WAIT_MINUTES} minutes."
-            warn "Ready: $ready_count / $vm_count VMs."
-            warn "Continuing with available VMs. Some may not be fully installed."
-            for pidfile in "${VM_DIR}"/*.pid; do
-                [ -f "$pidfile" ] || continue
-                local vm_name
-                vm_name=$(basename "$pidfile" .pid)
-                touch "${VM_DIR}/${vm_name}.installed"
+            warn "Timeout after ${MAX_WAIT_MINUTES} minutes. ${ready_count}/${vm_count} ready."
+            # Force-stamp remaining so Ansible can attempt connection
+            for vm_name in "${all_vms[@]}"; do
+                touch "${VM_DIR}/${vm_name}.installed" 2>/dev/null || true
             done
             return 0
         fi
 
-        # Progress display
-        info "Waiting... ${ready_count}/${vm_count} ready (${elapsed}s / ${max_seconds}s)"
+        local remaining=$(( max_seconds - elapsed ))
+        info "Progress: ${ready_count}/${vm_count} ready | elapsed ${elapsed}s | ${remaining}s remaining"
         sleep "$POLL_INTERVAL"
     done
 }

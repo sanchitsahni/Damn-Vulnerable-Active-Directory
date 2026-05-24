@@ -1,0 +1,28 @@
+---
+# ==============================================================================
+# DVAD - Phase 3: Lateral Movement vulns on file01.corp.local
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# LAT-010: SSH on the file server (cross-protocol pivot)
+# ------------------------------------------------------------------------------
+- name: LAT-010 - Install OpenSSH Server on file01
+  ansible.windows.win_feature:
+    name: OpenSSH.Server~~~~0.0.1.0
+    state: present
+  ignore_errors: yes
+
+- name: LAT-010 - Start and enable sshd
+  ansible.windows.win_service:
+    name: sshd
+    start_mode: auto
+    state: started
+  ignore_errors: yes
+
+- name: LAT-010 - Ensure firewall rule exists for sshd (firewall is off anyway)
+  ansible.windows.win_shell: |
+    if (-not (Get-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -ErrorAction SilentlyContinue)) {
+      New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -DisplayName 'OpenSSH Server (sshd)' `
+        -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22
+    }
+  ignore_errors: yes

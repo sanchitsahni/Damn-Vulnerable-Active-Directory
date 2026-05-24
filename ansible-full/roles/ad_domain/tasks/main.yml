@@ -1,0 +1,187 @@
+---
+- name: Install AD Domain Services
+  ansible.windows.win_feature:
+    name: AD-Domain-Services
+    state: present
+    include_management_tools: yes
+  register: ad_install
+
+- name: Install DNS Server
+  ansible.windows.win_feature:
+    name: DNS
+    state: present
+  when: inventory_hostname in groups['corp_dcs'] or inventory_hostname in groups['finance_dcs'] or inventory_hostname in groups['root_dcs']
+
+- name: Promote CORP forest
+  ansible.windows.win_shell: |
+    $role = (Get-CimInstance -ClassName Win32_ComputerSystem).DomainRole
+    if ($role -in 4, 5) {
+        Write-Host "Already a Domain Controller. Skipping."
+        exit 0
+    }
+    Import-Module ADDSDeployment
+    $securePassword = ConvertTo-SecureString "{{ domain_admin_password }}" -AsPlainText -Force
+    Install-ADDSForest `
+      -DomainName "{{ domain_name }}" `
+      -DomainNetbiosName "{{ domain_netbios }}" `
+      -ForestMode "WinThreshold" `
+      -DomainMode "WinThreshold" `
+      -InstallDns:$true `
+      -SafeModeAdministratorPassword $securePassword `
+      -NoRebootOnCompletion:$false `
+      -Force:$true
+  when: inventory_hostname == 'dc01.corp.local'
+  register: promote_forest
+
+- name: Wait for DC reboot
+  ansible.builtin.wait_for_connection:
+    delay: 30
+    timeout: 600
+  when: promote_forest.changed | default(false)
+
+- name: Promote EU child domain
+  ansible.windows.win_shell: |
+    $role = (Get-CimInstance -ClassName Win32_ComputerSystem).DomainRole
+    if ($role -in 4, 5) {
+        Write-Host "Already a Domain Controller. Skipping."
+        exit 0
+    }
+    Import-Module ADDSDeployment
+    $securePassword = ConvertTo-SecureString "{{ domain_admin_password }}" -AsPlainText -Force
+    Install-ADDSDomain `
+      -NewDomainName "eu" `
+      -ParentDomainName "{{ domain_name }}" `
+      -DomainType "ChildDomain" `
+      -InstallDNS:$true `
+      -CreateDNSDelegation:$true `
+      -Credential (New-Object System.Management.Automation.PSCredential("{{ domain_netbios }}\\Administrator", $securePassword)) `
+      -SafeModeAdministratorPassword $securePassword `
+      -Force:$true
+  when: inventory_hostname == 'dc01.eu.corp.local'
+  register: promote_child
+
+- name: Wait for child DC reboot
+  ansible.builtin.wait_for_connection:
+    delay: 30
+    timeout: 600
+  when: promote_child.changed | default(false)
+
+- name: Promote FINANCE forest
+  ansible.windows.win_shell: |
+    $role = (Get-CimInstance -ClassName Win32_ComputerSystem).DomainRole
+    if ($role -in 4, 5) {
+        Write-Host "Already a Domain Controller. Skipping."
+        exit 0
+    }
+    Import-Module ADDSDeployment
+    $securePassword = ConvertTo-SecureString "{{ domain_admin_password }}" -AsPlainText -Force
+    Install-ADDSForest `
+      -DomainName "finance.local" `
+      -DomainNetbiosName "FINANCE" `
+      -ForestMode "WinThreshold" `
+      -DomainMode "WinThreshold" `
+      -InstallDns:$true `
+      -SafeModeAdministratorPassword $securePassword `
+      -NoRebootOnCompletion:$false `
+      -Force:$true
+  when: inventory_hostname == 'dc01.finance.local'
+  register: promote_finance
+
+- name: Promote ROOT forest
+  ansible.windows.win_shell: |
+    $role = (Get-CimInstance -ClassName Win32_ComputerSystem).DomainRole
+    if ($role -in 4, 5) {
+        Write-Host "Already a Domain Controller. Skipping."
+        exit 0
+    }
+    Import-Module ADDSDeployment
+    $securePassword = ConvertTo-SecureString "{{ domain_admin_password }}" -AsPlainText -Force
+    Install-ADDSForest `
+      -DomainName "root.corp" `
+      -DomainNetbiosName "ROOT" `
+      -ForestMode "WinThreshold" `
+      -DomainMode "WinThreshold" `
+      -InstallDns:$true `
+      -SafeModeAdministratorPassword $securePassword `
+      -NoRebootOnCompletion:$false `
+      -Force:$true
+  when: inventory_hostname == 'dc01.root.corp'
+  register: promote_root
+
+- name: Wait for finance/root DC reboots
+  ansible.builtin.wait_for_connection:
+    delay: 30
+    timeout: 600
+  when: promote_finance.changed | default(false) or promote_root.changed | default(false)
+
+- name: Create OUs
+  ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
+    $domain = "{{ domain_name }}"
+    New-ADOrganizationalUnit -Name "ServiceAccounts" -Path "DC=corp,DC=local" -ProtectedFromAccidentalDeletion $false -ErrorAction SilentlyContinue
+    New-ADOrganizationalUnit -Name "Computers" -Path "DC=corp,DC=local" -ProtectedFromAccidentalDeletion $false -ErrorAction SilentlyContinue
+    New-ADOrganizationalUnit -Name "Servers" -Path "DC=corp,DC=local" -ProtectedFromAccidentalDeletion $false -ErrorAction SilentlyContinue
+    New-ADOrganizationalUnit -Name "GPO_Testing" -Path "DC=corp,DC=local" -ProtectedFromAccidentalDeletion $false -ErrorAction SilentlyContinue
+    New-ADOrganizationalUnit -Name "Restricted" -Path "DC=corp,DC=local" -ProtectedFromAccidentalDeletion $false -ErrorAction SilentlyContinue
+    New-ADGroup -Name "Help Desk" -SamAccountName "Help Desk" -GroupCategory Security -GroupScope Global -Path "OU=Restricted,DC=corp,DC=local" -ErrorAction SilentlyContinue
+    New-ADGroup -Name "IT Admins" -SamAccountName "IT Admins" -GroupCategory Security -GroupScope Global -Path "OU=Restricted,DC=corp,DC=local" -ErrorAction SilentlyContinue
+    New-ADGroup -Name "SQL Admins" -SamAccountName "SQL Admins" -GroupCategory Security -GroupScope Global -Path "OU=ServiceAccounts,DC=corp,DC=local" -ErrorAction SilentlyContinue
+    New-ADGroup -Name "Developers" -SamAccountName "Developers" -GroupCategory Security -GroupScope Universal -Path "OU=Restricted,DC=corp,DC=local" -ErrorAction SilentlyContinue
+  when: inventory_hostname == 'dc01.corp.local'
+  ignore_errors: yes
+
+- name: Create domain users
+  ansible.windows.win_shell: |
+    Import-Module ActiveDirectory
+    $users = @(
+      @{Name="attacker"; Password="{{ domain_admin_password }}"; Groups=@("Domain Users", "Remote Desktop Users")},
+      @{Name="user1"; Password="Password123!"; Groups=@("Domain Users")},
+      @{Name="user2"; Password="Welcome1"; Groups=@("Domain Users")},
+      @{Name="user3"; Password="Summer2025!"; Groups=@("Domain Users")},
+      @{Name="user4"; Password="Password123!"; Groups=@("Domain Users")},
+      @{Name="svc_web"; Password="WebSvc2025!"; Groups=@("Domain Users", "IT Admins"); SPN="HTTP/web.corp.local"},
+      @{Name="svc_sql"; Password="SqlSvc2025!"; Groups=@("Domain Users", "SQL Admins"); SPN="MSSQLSvc/sql01.corp.local:1433"},
+      @{Name="svc_nospreauth"; Password="NoPreAuth1!"; Groups=@("Domain Users"); NoPreAuth=$true},
+      @{Name="backup_user"; Password="Backup1!"; Groups=@("Backup Operators"); Reversible=$true},
+      @{Name="helpdesk"; Password="HelpDesk1!"; Groups=@("Domain Users", "Help Desk", "Account Operators")},
+      @{Name="sync_user"; Password="Sync1!"; Groups=@("Domain Users"); DCSync=$true},
+      @{Name="rodc_admin"; Password="Rodc1!"; Groups=@("Domain Users")},
+      @{Name="developer1"; Password="Dev123!"; Groups=@("Domain Users", "Developers")},
+      @{Name="qa_user"; Password="Qa123!"; Groups=@("Domain Users"); Description="QA account with path to SQL"},
+      @{Name="hr_user"; Password="Hr123!"; Groups=@("Domain Users", "HR")}
+    )
+    foreach ($u in $users) {
+      $secPwd = ConvertTo-SecureString $u.Password -AsPlainText -Force
+      $params = @{
+        Name = $u.Name
+        SamAccountName = $u.Name
+        UserPrincipalName = "$($u.Name)@{{ domain_name }}"
+        AccountPassword = $secPwd
+        Enabled = $true
+        PasswordNeverExpires = $true
+        CannotChangePassword = $false
+        Path = "CN=Users,DC=corp,DC=local"
+      }
+      if ($u.ContainsKey("Description")) { $params.Description = $u.Description }
+      try { New-ADUser @params -ErrorAction SilentlyContinue } catch { Write-Host "User $($u.Name) may exist" }
+      if ($u.ContainsKey("SPN")) { Set-ADUser -Identity $u.Name -ServicePrincipalNames @{Add=$u.SPN} -ErrorAction SilentlyContinue }
+      if ($u.ContainsKey("NoPreAuth") -and $u.NoPreAuth) { Set-ADAccountControl -Identity $u.Name -DoesNotRequirePreAuth $true -ErrorAction SilentlyContinue }
+      if ($u.ContainsKey("Reversible") -and $u.Reversible) { Set-ADUser -Identity $u.Name -AllowReversiblePasswordEncryption $true -ErrorAction SilentlyContinue }
+      foreach ($g in $u.Groups) {
+        try { Add-ADGroupMember -Identity $g -Members $u.Name } catch {}
+      }
+    }
+  when: inventory_hostname == 'dc01.corp.local'
+  ignore_errors: yes
+
+- name: Set DCSync rights for sync_user
+  ansible.windows.win_shell: |
+    $user = Get-ADUser -Identity "sync_user"
+    $acl = Get-ACL "AD:\DC=corp,DC=local"
+    $sid = [System.Security.Principal.SecurityIdentifier] $user.SID
+    $rule1 = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sid, " replicate directory changes", "Allow")
+    $rule2 = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sid, " replicate directory changes all", "Allow")
+    $acl.AddAccessRule($rule1)
+    $acl.AddAccessRule($rule2)
+    Set-ACL "AD:\DC=corp,DC=local" $acl
+  when: inventory_hostname == 'dc01.corp.local'

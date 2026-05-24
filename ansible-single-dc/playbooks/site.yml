@@ -1,0 +1,325 @@
+---
+# ==============================================================================
+# DVAD - Site Playbook
+# Master playbook for full AD lab provisioning
+# ==============================================================================
+
+# ==============================================================================
+# Phase 0: Password Check and Gather Facts
+# ==============================================================================
+- name: Ensure correct lab password and gather facts
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: Test 1 - Standard Local Admin
+      win_ping:
+      vars:
+        ansible_user: "Administrator"
+        ansible_password: "DVADlab2024!"
+      register: test1
+      ignore_unreachable: yes
+
+    - name: Test 2 - QCOW2 Default Local Admin
+      win_ping:
+      vars:
+        ansible_user: "Administrator"
+        ansible_password: "Dvadlab2024!"
+      register: test2
+      ignore_unreachable: yes
+      when: test1.unreachable is defined and test1.unreachable
+
+    - name: Test 3 - Domain Admin (Already Promoted)
+      win_ping:
+      vars:
+        ansible_user: "Administrator@{{ domain_name | default('corp.local') }}"
+        ansible_password: "DVADlab2024!"
+      register: test3
+      ignore_unreachable: yes
+      when: (test1.unreachable is defined and test1.unreachable) and (test2.unreachable is defined and test2.unreachable)
+
+    - name: Fail if all connection methods are unreachable
+      fail:
+        msg: "Failed to connect to host with any known password combination."
+      when: (test1.unreachable is defined and test1.unreachable) and (test2.unreachable is defined and test2.unreachable) and (test3.unreachable is defined and test3.unreachable)
+
+    - name: Change Administrator password if using QCOW2 Default
+      ansible.windows.win_user:
+        name: Administrator
+        password: "DVADlab2024!"
+        state: present
+      vars:
+        ansible_user: "Administrator"
+        ansible_password: "Dvadlab2024!"
+      when: test2.ping is defined
+
+    - name: Set correct ansible_user for the rest of the playbook
+      set_fact:
+        ansible_user: "Administrator@{{ domain_name | default('corp.local') }}"
+      when: test3.ping is defined
+
+    - name: Set standard ansible_password for the rest of the playbook
+      set_fact:
+        ansible_password: "DVADlab2024!"
+
+    - name: Gather facts now that credentials are correct
+      setup:
+
+    - name: Display host info
+      debug:
+        msg: "Provisioning {{ inventory_hostname }} [{{ ansible_os_family | default('Unknown') }}]"
+
+# ==============================================================================
+# Phase 1: Windows Base Setup (all hosts)
+# ==============================================================================
+- name: Configure Windows base settings on all hosts
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Import windows base role
+      import_role:
+        name: windows_base
+
+# ==============================================================================
+# Phase 2: Domain Controller Provisioning
+# ==============================================================================
+- name: Provision CORP.LOCAL Primary Domain Controller
+  hosts: dc01.corp.local
+  gather_facts: yes
+  tasks:
+    - name: Set static IP and promote to forest root
+      import_tasks: ../tasks/ad-ds-setup.yml
+    - name: Configure AD domain details (OUs, users, groups)
+      import_role:
+        name: ad_domain
+
+- name: Provision Child Domain (EU.CORP.LOCAL)
+  hosts: dc01.eu.corp.local
+  gather_facts: yes
+  tasks:
+    - name: Install AD DS and create child domain
+      import_tasks: ../tasks/child-domain-setup.yml
+
+- name: Provision FINANCE.LOCAL Domain
+  hosts: dc01.finance.local
+  gather_facts: yes
+  tasks:
+    - name: Install AD DS and promote to DC
+      import_tasks: ../tasks/finance-domain-setup.yml
+
+- name: Provision ROOT.CORP Domain
+  hosts: dc01.root.corp
+  gather_facts: yes
+  tasks:
+    - name: Install AD DS and promote to DC
+      import_tasks: ../tasks/root-domain-setup.yml
+
+# ==============================================================================
+# Phase 3: Join Member Servers to Domain
+# ==============================================================================
+- name: Join member servers to corp.local
+  hosts: corp_servers,corp_workstation
+  gather_facts: yes
+  tasks:
+    - name: Join domain corp.local
+      import_tasks: ../tasks/domain-join.yml
+
+# ==============================================================================
+# Phase 4: ADCS Deployment
+# ==============================================================================
+- name: Deploy ADCS with vulnerable templates
+  hosts: ca01.corp.local
+  gather_facts: yes
+  tasks:
+    - name: Install and configure ADCS
+      import_tasks: ../tasks/adcs-setup.yml
+    - name: Configure ADCS ESC vulnerabilities
+      import_tasks: ../tasks/vuln-adcs-esc.yml
+    - name: Import ADCS vulnerabilities role
+      import_role:
+        name: adcs_vulns
+
+# ==============================================================================
+# Phase 5: Cross-Forest Trusts
+# ==============================================================================
+- name: Configure Forest Trusts
+  hosts: dc01.corp.local
+  gather_facts: yes
+  tasks:
+    - name: Create trust relationships
+      import_tasks: ../tasks/trust-setup.yml
+    - name: Import network setup role (trusts, DNS)
+      import_role:
+        name: network_setup
+
+# ==============================================================================
+# Phase 6: Vulnerability Injection - Kerberos
+# ==============================================================================
+- name: Inject Kerberos Vulnerabilities
+  hosts: dc01.corp.local
+  gather_facts: yes
+  tasks:
+    - name: Configure Kerberos attack vectors
+      import_tasks: ../tasks/vuln-kerberos.yml
+    - name: Import vulnerability setup role
+      import_role:
+        name: vuln_setup
+
+# ==============================================================================
+# Phase 6.4: Enumeration Surface (ENUM-001..ENUM-080)
+# Enables every Windows / AD service whose presence is required for the full
+# breadth of enumeration techniques (SNMP, NFS, Telnet, FTP, IIS-WebDAV, SMB1
+# on file01, null-session pipe parity across DCs, WinRM-HTTPS, ADWS, WSD,
+# DNS-AXFR, shared printer + WebClient on every host, etc.).
+# Per-host gating is inside the task file itself; we target all hosts here.
+# ==============================================================================
+- name: Inject Enumeration-Surface Services
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Configure ENUM-001..ENUM-080 surface services
+      import_tasks: ../tasks/vuln-enum-surface.yml
+
+# ==============================================================================
+# Phase 6.5: Recon-Surface Vulnerabilities (REC-001..REC-015)
+# Preconditions for Phase 1 of the attack matrix.
+# ==============================================================================
+- name: Inject Recon-Surface Vulnerabilities
+  hosts: dc01.corp.local
+  gather_facts: yes
+  tasks:
+    - name: Configure REC-001..REC-015 surfaces
+      import_tasks: ../tasks/vuln-recon.yml
+
+# ==============================================================================
+# Phase 6.6: Credential Access Vulnerabilities (CRED-001..CRED-065)
+# ==============================================================================
+- name: Inject Credential Access Vulnerabilities
+  hosts: dc01.corp.local
+  gather_facts: yes
+  tasks:
+    - name: Configure CRED-001..CRED-065 paths
+      import_tasks: ../tasks/vuln-cred-access.yml
+
+# ==============================================================================
+# Phase 6.7: Lateral Movement Vulnerabilities (LAT-001..LAT-035)
+# Split across DC-side (trusts, ACLs, DnsAdmins) and host-side
+# (SSH on file01, SMB signing + coercion drops on ws01).
+# ==============================================================================
+- name: Inject Lateral Movement Vulnerabilities (DC-side)
+  hosts: dc01.corp.local
+  gather_facts: yes
+  tasks:
+    - name: Configure LAT-* DC-side paths
+      import_tasks: ../tasks/vuln-lateral.yml
+
+- name: Inject Lateral Movement Vulnerabilities (file01)
+  hosts: file01.corp.local
+  gather_facts: yes
+  tasks:
+    - name: Configure LAT-* file01 paths (SSH pivot)
+      import_tasks: ../tasks/vuln-lateral-file01.yml
+
+- name: Inject Lateral Movement Vulnerabilities (ws01)
+  hosts: ws01.corp.local
+  gather_facts: yes
+  tasks:
+    - name: Configure LAT-* ws01 paths (SMB signing, LNK/SCF drop)
+      import_tasks: ../tasks/vuln-lateral-ws01.yml
+
+# ==============================================================================
+# Phase 7: Vulnerability Injection - ACL Abuse
+# ==============================================================================
+- name: Inject ACL Vulnerabilities
+  hosts: dc01.corp.local
+  gather_facts: yes
+  tasks:
+    - name: Configure ACL abuse vectors
+      import_tasks: ../tasks/vuln-acl.yml
+
+# ==============================================================================
+# Phase 8: Vulnerability Injection - Privilege Escalation
+# ==============================================================================
+- name: Inject PE Vulnerabilities on File Server
+  hosts: file01.corp.local
+  gather_facts: yes
+  tasks:
+    - name: Configure privilege escalation vectors
+      import_tasks: ../tasks/vuln-privesc-file.yml
+
+- name: Inject PE Vulnerabilities on SQL Server
+  hosts: sql01.corp.local
+  gather_facts: yes
+  tasks:
+    - name: Configure SQL PE vectors
+      import_tasks: ../tasks/vuln-privesc-sql.yml
+
+- name: Inject PE Vulnerabilities on Workstation
+  hosts: ws01.corp.local
+  gather_facts: yes
+  tasks:
+    - name: Configure attacker workstation
+      import_tasks: ../tasks/vuln-attacker-host.yml
+    - name: Configure PE surfaces on ws01
+      import_tasks: ../tasks/vuln-privesc-ws01.yml
+
+- name: Inject PE Vulnerabilities on DC (Operators, GPO scripts)
+  hosts: dc01.corp.local
+  gather_facts: yes
+  tasks:
+    - name: Configure DC-side PE surfaces
+      import_tasks: ../tasks/vuln-privesc-dc.yml
+
+# ==============================================================================
+# Phase 9: Persistence Backdoors
+# ==============================================================================
+- name: Deploy Persistence Mechanisms
+  hosts: dc01.corp.local
+  gather_facts: yes
+  tasks:
+    - name: Configure persistence vectors
+      import_tasks: ../tasks/vuln-persistence.yml
+
+# ==============================================================================
+# Phase 9.5: Domain / Forest Compromise (DF-001..DF-040)
+# Trust-key resets, SID-filter bypass, ESC13/14/15/16, ZeroLogon precondition,
+# DCShadow / SID-history extended rights.
+# ==============================================================================
+- name: Inject Forest Compromise Surfaces
+  hosts: dc01.corp.local
+  gather_facts: yes
+  tasks:
+    - name: Configure DF-001..DF-040 preconditions
+      import_tasks: ../tasks/vuln-forest-compromise.yml
+
+# ==============================================================================
+# Phase 10: Flag Placement
+# ==============================================================================
+- name: Place CTF Flags
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Deploy flags across the lab
+      import_tasks: ../tasks/flag-deployment.yml
+    - name: Import flag factory role
+      import_role:
+        name: flag_factory
+
+# ==============================================================================
+# Phase 11: Verification
+# ==============================================================================
+- name: Verify Lab Deployment
+  hosts: dc01.corp.local
+  gather_facts: yes
+  tasks:
+    - name: Run sanity checks
+      import_tasks: ../tasks/verify-lab.yml
+
+# ==============================================================================
+# Phase 12: Generate Handout
+# ==============================================================================
+- name: Generate participant handout
+  hosts: ws01.corp.local
+  gather_facts: yes
+  tasks:
+    - name: Create handout files
+      import_tasks: ../tasks/generate-handout.yml

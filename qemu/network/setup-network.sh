@@ -196,11 +196,9 @@ destroy_all_networks() {
 # If executed directly
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    source "${SCRIPT_DIR}/../../scripts/common.sh" 2>/dev/null || {
-        log()  { echo "[+] $*"; }
-        warn() { echo "[!] $*"; }
-        info() { echo "[*] $*"; }
-    }
+    log()  { echo -e "\033[0;32m[+]\033[0m $*"; }
+    warn() { echo -e "\033[1;33m[!]\033[0m $*"; }
+    info() { echo -e "\033[0;34m[*]\033[0m $*"; }
     case "${1:-create}" in
         create)  create_all_networks ;;
         destroy) destroy_all_networks ;;

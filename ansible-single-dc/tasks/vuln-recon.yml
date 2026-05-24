@@ -1,0 +1,113 @@
+---
+# ==============================================================================
+# DVAD - Phase 1: Reconnaissance Vulnerabilities (REC-001..REC-015)
+# Target: dc01.corp.local (and related infrastructure)
+#
+# These are the *enumeration preconditions* for the rest of the lab.
+# Most are anonymous-readable surfaces, broadcast protocols, or
+# unrestricted-by-default features Microsoft hardens in modern builds.
+# ==============================================================================
+
+# REC-007: DNS Zone Transfer (AXFR) — allow zone transfers from anywhere on the lab subnets
+- name: REC-007 - Allow unrestricted zone transfers
+  win_shell: |
+    Import-Module DnsServer
+    Set-DnsServerPrimaryZone -Name "corp.local" -SecureSecondaries TransferAnyServer -ErrorAction SilentlyContinue
+    dnscmd /ZoneResetSecondaries corp.local /NonSecure | Out-Null
+  ignore_errors: yes
+
+# REC-010 / REC-046: LLMNR + NBT-NS poisoning — make sure they're NOT disabled by GPO
+- name: REC-010 - Ensure LLMNR is enabled (do not disable multicast name resolution)
+  win_shell: |
+    $key = "HKLM:\Software\Policies\Microsoft\Windows NT\DNSClient"
+    if (Test-Path $key) {
+      Remove-ItemProperty -Path $key -Name "EnableMulticast" -ErrorAction SilentlyContinue
+    }
+  ignore_errors: yes
+
+# REC-008: SMB null session / guest enumeration
+- name: REC-008 - Allow anonymous SAM/Share enumeration
+  win_shell: |
+    reg add "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" /v RestrictAnonymous /t REG_DWORD /d 0 /f | Out-Null
+    reg add "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" /v RestrictAnonymousSAM /t REG_DWORD /d 0 /f | Out-Null
+    reg add "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" /v EveryoneIncludesAnonymous /t REG_DWORD /d 1 /f | Out-Null
+    reg add "HKLM\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" /v NullSessionPipes /t REG_MULTI_SZ /d "netlogon\0samr\0lsarpc\0browser\0srvsvc" /f | Out-Null
+    reg add "HKLM\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" /v RestrictNullSessAccess /t REG_DWORD /d 0 /f | Out-Null
+  ignore_errors: yes
+
+- name: REC-008 - Enable Guest account on DC
+  win_shell: |
+    Import-Module Microsoft.PowerShell.LocalAccounts
+    try {
+      Enable-LocalUser -Name "Guest" -ErrorAction SilentlyContinue
+      Set-LocalUser -Name "Guest" -PasswordNeverExpires $true -ErrorAction SilentlyContinue
+    } catch { Write-Host "Guest account adjust: $($_.Exception.Message)" }
+  ignore_errors: yes
+
+# REC-006 / REC-011: Anonymous LDAP / Password Policy readability
+- name: REC-006 - Allow LDAP unsigned binds (no LDAP signing enforcement)
+  win_shell: |
+    reg add "HKLM\SYSTEM\CurrentControlSet\Services\NTDS\Parameters" /v LDAPServerIntegrity /t REG_DWORD /d 1 /f | Out-Null
+  ignore_errors: yes
+
+# REC-015 / CRED-030: Sensitive data in SYSVOL (Group Policy Preferences password)
+- name: REC-015 - Ensure SYSVOL GPP directory exists
+  win_shell: |
+    $sysvolBase = "C:\Windows\SYSVOL\domain\Policies"
+    if (-not (Test-Path $sysvolBase)) {
+      Write-Host "SYSVOL not yet replicated; skipping GPP drop"
+      exit 0
+    }
+    $pol = "{DEADBEEF-0BAD-CAFE-FEED-DEADBEEF1337}"
+    $dir = Join-Path $sysvolBase "$pol\Machine\Preferences\Groups"
+    New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    Write-Host "GPP directory ready at $dir"
+  register: gpp_dir_result
+  ignore_errors: yes
+
+- name: REC-015 - Drop legacy GPP Groups.xml with cpassword
+  win_copy:
+    dest: 'C:\Windows\SYSVOL\domain\Policies\{DEADBEEF-0BAD-CAFE-FEED-DEADBEEF1337}\Machine\Preferences\Groups\Groups.xml'
+    content: |
+      <?xml version="1.0" encoding="utf-8"?>
+      <Groups clsid="{3125E937-EB16-4b4c-9934-544FC6D24D26}">
+        <User clsid="{DF5F1855-51E5-4d24-8B1A-D9BDE98BA1D1}"
+              name="svc_legacy" image="2" changed="2020-01-01 00:00:00"
+              uid="{B3E5C5A0-1234-5678-9ABC-DEF012345678}">
+          <Properties action="C" fullName="" description="Legacy service account"
+                      cpassword="j1Uyj3Vx8TY9LtLZil2uAuZkFQA/4latT76ZwgdHdhw"
+                      changeLogon="0" noChange="0" neverExpires="1" acctDisabled="0"
+                      subAuthority="" userName="svc_legacy"/>
+        </User>
+      </Groups>
+  when: gpp_dir_result is not failed
+  ignore_errors: yes
+
+- name: REC-015 - Drop NETLOGON map_backup.bat with hardcoded creds
+  win_copy:
+    dest: 'C:\Windows\SYSVOL\domain\scripts\map_backup.bat'
+    content: |
+      @echo off
+      REM Legacy mapping script - leftover from 2014
+      net use Z: \\file01.corp.local\Backups /user:CORP\backup_user "BackupP@ssw0rd!2014" /persistent:yes
+  ignore_errors: yes
+
+# REC-009, REC-012, REC-013: documented cross-references
+- name: REC-009/012/013 - cross-reference markers
+  debug:
+    msg: |
+      REC-009 (SQL Browser broadcast) configured by vuln-privesc-sql.yml
+      REC-012 (ADCS template readability) configured by adcs-setup.yml
+      REC-013 (DoesNotRequirePreAuth) configured by vuln-kerberos.yml
+
+# REC-001..005, REC-014: pure default-AD behavior, no extra config needed
+- name: REC-001..005, REC-014 - no additional config needed (AD default reads)
+  debug:
+    msg: |
+      Inherent to AD, no injection required:
+        REC-001 Domain enumeration (LDAP/ADWS)
+        REC-002 SPN enumeration
+        REC-003 BloodHound ingestor
+        REC-004 Trust enumeration
+        REC-005 GPO enumeration
+        REC-014 Machine account enumeration

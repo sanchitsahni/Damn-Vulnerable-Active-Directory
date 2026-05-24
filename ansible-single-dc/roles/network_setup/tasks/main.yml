@@ -1,0 +1,56 @@
+---
+- name: Set static IP on virbr1 hosts
+  ansible.windows.win_shell: |
+    $index = (Get-NetAdapter | Where-Object { $_.Status -eq "Up" }).InterfaceIndex
+    New-NetIPAddress -InterfaceIndex $index -IPAddress "{{ ansible_host }}" -PrefixLength 21 -DefaultGateway "10.10.0.1" -Confirm:$false
+    Set-DnsClientServerAddress -InterfaceIndex $index -ServerAddresses ("10.10.0.10")
+  when: "'corp_dcs' in group_names or 'corp_servers' in group_names or 'corp_workstation' in group_names"
+  async: 20
+  poll: 0
+
+- name: Wait for network to stabilize (virbr1)
+  wait_for_connection:
+    timeout: 60
+  when: "'corp_dcs' in group_names or 'corp_servers' in group_names or 'corp_workstation' in group_names"
+
+- name: Set static IP on virbr2 hosts
+  ansible.windows.win_shell: |
+    $index = (Get-NetAdapter | Where-Object { $_.Status -eq "Up" }).InterfaceIndex
+    New-NetIPAddress -InterfaceIndex $index -IPAddress "{{ ansible_host }}" -PrefixLength 24 -DefaultGateway "10.20.0.1" -Confirm:$false
+    Set-DnsClientServerAddress -InterfaceIndex $index -ServerAddresses ("10.20.0.10")
+  when: "'finance_dcs' in group_names"
+  async: 20
+  poll: 0
+
+- name: Wait for network to stabilize (virbr2)
+  wait_for_connection:
+    timeout: 60
+  when: "'finance_dcs' in group_names"
+
+- name: Set static IP on virbr3 hosts
+  ansible.windows.win_shell: |
+    $index = (Get-NetAdapter | Where-Object { $_.Status -eq "Up" }).InterfaceIndex
+    New-NetIPAddress -InterfaceIndex $index -IPAddress "{{ ansible_host }}" -PrefixLength 24 -DefaultGateway "10.30.0.1" -Confirm:$false
+    Set-DnsClientServerAddress -InterfaceIndex $index -ServerAddresses ("10.30.0.10")
+  when: "'root_dcs' in group_names"
+  async: 20
+  poll: 0
+
+- name: Wait for network to stabilize (virbr3)
+  wait_for_connection:
+    timeout: 60
+  when: "'root_dcs' in group_names"
+
+- name: Configure forest trusts
+  ansible.windows.win_shell: |
+    $securePassword = ConvertTo-SecureString "{{ domain_admin_password }}" -AsPlainText -Force
+    # Create external trust CORP -> FINANCE
+    netdom trust {{ domain_name }} /d:{{ finance_domain }} /add /twoway /realm
+  when: inventory_hostname == 'dc01.corp.local'
+  ignore_errors: yes
+
+- name: Configure tree-root trust ROOT -> CORP
+  ansible.windows.win_shell: |
+    netdom trust {{ forest_root }} /d:{{ domain_name }} /add /tree /twoway
+  when: inventory_hostname == 'dc01.root.corp'
+  ignore_errors: yes
