@@ -47,9 +47,10 @@
 - name: Deploy vulnerable scheduled tasks
   ansible.windows.win_shell: |
     # Overwritable task for privilege escalation
-    schtasks /create /tn "VulnUpdater" /tr "C:\\VulnServices\\updater.bat" /sc onstart /ru SYSTEM
-    cmd /c "echo @echo off > C:\\VulnServices\\updater.bat"
-    icacls "C:\\VulnServices\\updater.bat" /grant Everyone:(OI)(CI)F
+    schtasks /create /tn "VulnUpdater" /tr "C:\VulnServices\updater.bat" /sc onstart /ru SYSTEM
+    cmd /c "echo @echo off > C:\VulnServices\updater.bat"
+    icacls "C:\VulnServices\updater.bat" /grant 'Everyone:(OI)(CI)F'
+  ignore_errors: yes
 
 - name: Configure registry autoruns (PER-001)
   ansible.windows.win_regedit:
