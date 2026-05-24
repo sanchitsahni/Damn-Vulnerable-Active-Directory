@@ -1,146 +1,105 @@
 ---
-- name: Ensure vulnerable directories exist
-  ansible.windows.win_file:
-    path: "{{ item }}"
-    state: directory
-  loop:
-    - "C:\\VulnServices"
-    - "C:\\Tools"
-    - "C:\\Program Files\\VulnApp"
-    - "C:\\Users\\Public\\Documents"
-
-- name: Deploy vulnerable services for PE
+- name: Deploy local system vulnerabilities (Merged)
   ansible.windows.win_shell: |
+    # Ensure vulnerable directories exist
+    New-Item -ItemType Directory -Path "C:\VulnServices" -Force | Out-Null
+    New-Item -ItemType Directory -Path "C:\Tools" -Force | Out-Null
+    New-Item -ItemType Directory -Path "C:\Program Files\VulnApp" -Force | Out-Null
+    New-Item -ItemType Directory -Path "C:\Users\Public\Documents" -Force | Out-Null
+
     # Unquoted Service Path vulnerability (PE-007)
-    New-Item -ItemType Directory -Path "C:\\Program Files\\Vuln Service" -Force
-    sc.exe create VulnService binPath= "C:\\Program Files\\Vuln Service\\service.exe" start= auto obj= LocalSystem
-    # Actually create a simple service binary placeholder
-    cmd /c "echo @echo off > C:\\Program Files\\Vuln Service\\service.exe"
+    New-Item -ItemType Directory -Path "C:\Program Files\Vuln Service" -Force | Out-Null
+    sc.exe create VulnService binPath= "C:\Program Files\Vuln Service\service.exe" start= auto obj= LocalSystem
+    cmd /c "echo @echo off > C:\Program Files\Vuln Service\service.exe"
 
     # Weak service ACL (PE-008)
     sc.exe sdset VulnService "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)(A;;RPWPDTLO;;;WD)"
 
     # Service with modifiable binary folder (PE-042)
-    New-Item -ItemType Directory -Path "C:\\Tools" -Force
-    icacls "C:\\Tools" /grant Everyone:(OI)(CI)F
-    sc.exe create ToolService binPath= "C:\\Tools\\toolsvc.exe" start= demand obj= LocalSystem
-    cmd /c "echo fake > C:\\Tools\\toolsvc.exe"
+    icacls "C:\Tools" /grant "Everyone:(OI)(CI)F"
+    sc.exe create ToolService binPath= "C:\Tools\toolsvc.exe" start= demand obj= LocalSystem
+    cmd /c "echo fake > C:\Tools\toolsvc.exe"
 
-- name: Configure AlwaysInstallElevated (PE-011)
-  ansible.windows.win_regedit:
-    path: "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\Installer"
-    name: "AlwaysInstallElevated"
-    data: 1
-    type: dword
+    # Configure AlwaysInstallElevated (PE-011)
+    reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\Installer" /v AlwaysInstallElevated /t REG_DWORD /d 1 /f
+    reg add "HKCU\SOFTWARE\Policies\Microsoft\Windows\Installer" /v AlwaysInstallElevated /t REG_DWORD /d 1 /f
 
-- name: Configure AlwaysInstallElevated HKCU
-  ansible.windows.win_regedit:
-    path: "HKCU:\\SOFTWARE\\Policies\\Microsoft\\Windows\\Installer"
-    name: "AlwaysInstallElevated"
-    data: 1
-    type: dword
+    # Configure PATH hijacking directory (PE-010)
+    [Environment]::SetEnvironmentVariable("Path", "C:\Tools;" + [Environment]::GetEnvironmentVariable("Path", "Machine"), "Machine")
 
-- name: Configure PATH hijacking directory (PE-010)
-  ansible.windows.win_shell: |
-    [Environment]::SetEnvironmentVariable("Path", "C:\\Tools;" + [Environment]::GetEnvironmentVariable("Path", "Machine"), "Machine")
-
-- name: Deploy vulnerable scheduled tasks
-  ansible.windows.win_shell: |
-    # Overwritable task for privilege escalation
+    # Deploy vulnerable scheduled tasks
     schtasks /create /tn "VulnUpdater" /tr "C:\VulnServices\updater.bat" /sc onstart /ru SYSTEM
     cmd /c "echo @echo off > C:\VulnServices\updater.bat"
-    icacls "C:\VulnServices\updater.bat" /grant 'Everyone:(OI)(CI)F'
-  ignore_errors: yes
+    icacls "C:\VulnServices\updater.bat" /grant "Everyone:(OI)(CI)F"
 
-- name: Configure registry autoruns (PER-001)
-  ansible.windows.win_regedit:
-    path: "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"
-    name: "VulnUpdater"
-    data: "C:\\VulnServices\\updater.exe"
-    type: expandstring
+    # Configure registry autoruns (PER-001)
+    reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" /v VulnUpdater /t REG_EXPAND_SZ /d "C:\VulnServices\updater.exe" /f
 
-- name: Configure IFEO backdoors (PER-002)
-  ansible.windows.win_shell: |
-    reg add "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options\\sethc.exe" /v Debugger /t REG_SZ /d "cmd.exe" /f
-    reg add "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options\\utilman.exe" /v Debugger /t REG_SZ /d "cmd.exe" /f
-    reg add "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options\\Magnify.exe" /v Debugger /t REG_SZ /d "cmd.exe" /f
-    reg add "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options\\Narrator.exe" /v Debugger /t REG_SZ /d "cmd.exe" /f
+    # Configure IFEO backdoors (PER-002)
+    reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\sethc.exe" /v Debugger /t REG_SZ /d "cmd.exe" /f
+    reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\utilman.exe" /v Debugger /t REG_SZ /d "cmd.exe" /f
+    reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\Magnify.exe" /v Debugger /t REG_SZ /d "cmd.exe" /f
+    reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\Narrator.exe" /v Debugger /t REG_SZ /d "cmd.exe" /f
 
-- name: Configure AppInit_DLLs (PER-012)
-  ansible.windows.win_shell: |
-    reg add "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Windows" /v LoadAppInit_DLLs /t REG_DWORD /d 1 /f
-    reg add "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Windows" /v RequireSignedAppInit_DLLs /t REG_DWORD /d 0 /f
-    reg add "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Windows" /v AppInit_DLLs /t REG_SZ /d "C:\\VulnServices\\evil.dll" /f
+    # Configure AppInit_DLLs (PER-012)
+    reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Windows" /v LoadAppInit_DLLs /t REG_DWORD /d 1 /f
+    reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Windows" /v RequireSignedAppInit_DLLs /t REG_DWORD /d 0 /f
+    reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Windows" /v AppInit_DLLs /t REG_SZ /d "C:\VulnServices\evil.dll" /f
 
-- name: Deploy weak ACL on sensitive files/directories
-  ansible.windows.win_shell: |
-    # Make C:\Flags traversable by everyone
-    icacls "C:\\Flags" /grant Everyone:(RX) /T
-    # Weak GPO scripts folder
-    icacls "C:\\Windows\\SYSVOL\\sysvol\\corp.local\\Policies" /grant "Authenticated Users":(RX) /T 2>$null
-    # Writable startup folder
-    icacls "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\StartUp" /grant Everyone:(OI)(CI)M
+    # Deploy weak ACL on sensitive files/directories
+    icacls "C:\Flags" /grant "Everyone:(RX)" /T
+    icacls "C:\Windows\SYSVOL\sysvol\corp.local\Policies" /grant "Authenticated Users:(RX)" /T 2>$null
+    icacls "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp" /grant "Everyone:(OI)(CI)M"
 
-- name: Enable Guest account (REC-008)
-  ansible.windows.win_shell: |
+    # Enable Guest account (REC-008)
     net user Guest /active:yes
     net localgroup Guests Guest /add
 
-- name: Set up constrained delegation on svc_web
+    # Configure SMB shares with weak permissions
+    New-Item -ItemType Directory -Path "C:\Shared" -Force | Out-Null
+    New-SmbShare -Name "PublicShare" -Path "C:\Shared" -FullAccess Everyone -ErrorAction SilentlyContinue
+    icacls "C:\Shared" /grant "Everyone:(OI)(CI)F"
+  ignore_errors: yes
+
+- name: Install MSSQL Express stub
   ansible.windows.win_shell: |
+    Write-Host "SQL install stub - SQL01 would have SQL installed with SA/weak password"
+    New-Item -ItemType File -Path "C:\SQL_INSTALLED.txt" -Force
+  when: inventory_hostname == 'sql01.corp.local'
+  ignore_errors: yes
+
+- name: Deploy AD object vulnerabilities (Merged)
+  ansible.windows.win_shell: |
+    # Set up constrained delegation on svc_web
     $user = Get-ADUser -Identity "svc_web"
     Set-ADAccountControl -Identity "svc_web" -TrustedToAuthForDelegation $true
     Set-ADUser -Identity "svc_web" -Add @{msDS-AllowedToDelegateTo="HTTP/ws01.corp.local"}
-  when: inventory_hostname == 'dc01.corp.local'
 
-- name: Set up unconstrained delegation on FILE01
-  ansible.windows.win_shell: |
+    # Set up unconstrained delegation on FILE01
     $comp = Get-ADComputer -Identity "file01"
     Set-ADAccountControl -Identity $comp -TrustedForDelegation $true
-  when: inventory_hostname == 'dc01.corp.local'
 
-- name: Configure RBCD on ws01 for svc_web
-  ansible.windows.win_shell: |
-    $comp = Get-ADComputer -Identity "ws01"
+    # Configure RBCD on ws01 for svc_web
+    $ws01 = Get-ADComputer -Identity "ws01"
     $svc = Get-ADComputer -Identity "svc_web"
     $sid = New-Object System.Security.Principal.SecurityIdentifier ($svc.SID)
     $raw = New-Object byte[] $sid.BinaryLength
     $sid.GetBinaryForm($raw,0)
-    Set-ADComputer -Identity $comp -Replace @{'msDS-AllowedToActOnBehalfOfOtherIdentity'=$raw}
-  when: inventory_hostname == 'dc01.corp.local'
+    Set-ADComputer -Identity $ws01 -Replace @{'msDS-AllowedToActOnBehalfOfOtherIdentity'=$raw}
 
-- name: Install MSSQL Express with weak SA
-  ansible.windows.win_shell: |
-    # Download and silent-install SQL Express for SQL01
-    # In production lab, use pre-extracted installer approach
-    # This is a simplified stub - full MSSQL install would be separate download
-    Write-Host "SQL install stub - SQL01 would have SQL installed with SA/weak password"
-    New-Item -ItemType File -Path "C:\\SQL_INSTALLED.txt"
-  when: inventory_hostname == 'sql01.corp.local'
-
-- name: Deploy vulnerable GPO with stored credentials
-  ansible.windows.win_shell: |
-    # SYSVOL script with credentials
-    $scriptPath = "C:\\Windows\\SYSVOL\\sysvol\\corp.local\\scripts"
-    New-Item -ItemType Directory -Path $scriptPath -Force
-    '@echo off' | Out-File -FilePath "$scriptPath\\login.bat" -Encoding ASCII
-    'REM FLAG: REC-015 found credentials in script' | Out-File -FilePath "$scriptPath\\login.bat" -Append -Encoding ASCII
-    'net use \\file01.corp.local\\share /user:corp\\svc_web WebSvc2025!' | Out-File -FilePath "$scriptPath\\login.bat" -Append -Encoding ASCII
-  when: inventory_hostname == 'dc01.corp.local'
-
-- name: Configure SMB shares with weak permissions
-  ansible.windows.win_shell: |
-    New-Item -ItemType Directory -Path "C:\\Shared" -Force
-    New-SmbShare -Name "PublicShare" -Path "C:\\Shared" -FullAccess Everyone
-    icacls "C:\\Shared" /grant Everyone:(OI)(CI)F
-
-- name: Configure shadow credentials target (helpdesk can write msDS-KeyCredentialLink)
-  ansible.windows.win_shell: |
-    $user = Get-ADUser -Identity "helpdesk"
+    # Configure shadow credentials target (helpdesk can write msDS-KeyCredentialLink)
     $target = Get-ADUser -Identity "developer1"
-    $acl = Get-ACL "AD:\$target"
-    $sid = [System.Security.Principal.SecurityIdentifier] $user.SID
-    $rule = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sid, "WriteProperty", "Allow", [guid]"5b47d60f-6150-4db2-a45b-7f9779355d6c")
+    $acl = Get-ACL "AD:\$($target.DistinguishedName)"
+    $sidHD = [System.Security.Principal.SecurityIdentifier] (Get-ADUser -Identity "helpdesk").SID
+    $rule = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sidHD, "WriteProperty", "Allow", [guid]"5b47d60f-6150-4db2-a45b-7f9779355d6c")
     $acl.AddAccessRule($rule)
-    Set-ACL "AD:\$target" $acl
+    Set-ACL "AD:\$($target.DistinguishedName)" $acl
+
+    # Deploy vulnerable GPO with stored credentials
+    $scriptPath = "C:\Windows\SYSVOL\sysvol\corp.local\scripts"
+    New-Item -ItemType Directory -Path $scriptPath -Force | Out-Null
+    '@echo off' | Out-File -FilePath "$scriptPath\login.bat" -Encoding ASCII
+    'REM FLAG: REC-015 found credentials in script' | Out-File -FilePath "$scriptPath\login.bat" -Append -Encoding ASCII
+    'net use \\file01.corp.local\share /user:corp\svc_web WebSvc2025!' | Out-File -FilePath "$scriptPath\login.bat" -Append -Encoding ASCII
   when: inventory_hostname == 'dc01.corp.local'
+  ignore_errors: yes

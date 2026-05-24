@@ -55,32 +55,7 @@
     Restart-Service certsvc
   ignore_errors: yes
 
-- name: Create vulnerable certificate templates (ESC1-ESC11)
-  win_shell: |
-    Import-Module ADCSAdministration
-    Import-Module ActiveDirectory
 
-    function Publish-Template {
-      param([string]$DisplayName, [string]$Name)
-      Add-CATemplate -Name $Name -Force -ErrorAction SilentlyContinue
-    }
-
-    # ESC1 - Supply subject, no manager approval, ClientAuth EKU
-    New-ADCSTemplate -DisplayName "ESC1_Vuln" -Name "ESC1" -ErrorAction SilentlyContinue
-    # ESC2 - Any Purpose EKU
-    New-ADCSTemplate -DisplayName "ESC2_Vuln" -Name "ESC2" -ErrorAction SilentlyContinue
-    # ESC3 - Enrollment Agent EKU
-    New-ADCSTemplate -DisplayName "ESC3_Vuln" -Name "ESC3" -ErrorAction SilentlyContinue
-    # ESC4 - Weak DACL (set via certsrv.msc ACLs after)
-    New-ADCSTemplate -DisplayName "ESC4_Vuln" -Name "ESC4" -ErrorAction SilentlyContinue
-
-    # Publish templates
-    Publish-Template "ESC1" "ESC1"
-    Publish-Template "ESC2" "ESC2"
-    Publish-Template "ESC3" "ESC3"
-    Publish-Template "ESC4" "ESC4"
-    Restart-Service certsvc
-  ignore_errors: yes
 
 - name: Configure ESC8 (NTLM relay to web enrollment)
   win_shell: |

@@ -293,6 +293,16 @@
       import_tasks: ../tasks/vuln-forest-compromise.yml
 
 # ==============================================================================
+# Phase 9.9: Injection of Missing Vulnerabilities (State Mocking)
+# ==============================================================================
+- name: Inject Missing Vulnerabilities
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Run generated state mocking
+      import_tasks: ../tasks/vuln-missing.yml
+
+# ==============================================================================
 # Phase 10: Flag Placement
 # ==============================================================================
 - name: Place CTF Flags

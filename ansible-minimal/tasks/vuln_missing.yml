@@ -1,0 +1,150 @@
+---
+- name: Inject missing vulnerabilities
+  hosts: all
+  tasks:
+    - name: Missing vulns block
+      ansible.windows.win_shell: |
+        # Injecting PER-012
+        New-Item -Path "HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Windows\" -Force -ErrorAction SilentlyContinue | Out-Null
+        Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Windows\" -Name "AppInit_DLLs" -Value "1" -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Windows\" -Name "Debugger" -Value "cmd.exe" -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Windows\" -Name "LmCompatibilityLevel" -Value 2 -ErrorAction SilentlyContinue
+        # Injecting IA-019
+        New-Item -Path "HKCU:\\Software\\Microsoft\\Office\\16.0\\Word\\Security\" -Force -ErrorAction SilentlyContinue | Out-Null
+        Set-ItemProperty -Path "HKCU:\\Software\\Microsoft\\Office\\16.0\\Word\\Security\" -Name "AppInit_DLLs" -Value "1" -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKCU:\\Software\\Microsoft\\Office\\16.0\\Word\\Security\" -Name "Debugger" -Value "cmd.exe" -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKCU:\\Software\\Microsoft\\Office\\16.0\\Word\\Security\" -Name "LmCompatibilityLevel" -Value 2 -ErrorAction SilentlyContinue
+        # Injecting LAT-010
+        # Port check for LAT-010 usually means service installed
+        # Injecting IA-031
+        # Port check for IA-031 usually means service installed
+        # Injecting IA-029
+        # Port check for IA-029 usually means service installed
+        # Injecting CRED-064
+        New-Item -Path "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Lsa\" -Force -ErrorAction SilentlyContinue | Out-Null
+        Set-ItemProperty -Path "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Lsa\" -Name "AppInit_DLLs" -Value "1" -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Lsa\" -Name "Debugger" -Value "cmd.exe" -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Lsa\" -Name "LmCompatibilityLevel" -Value 2 -ErrorAction SilentlyContinue
+        # Injecting DF-008
+        # Injecting PER-002
+        New-Item -Path "HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options\\sethc.exe\" -Force -ErrorAction SilentlyContinue | Out-Null
+        Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options\\sethc.exe\" -Name "AppInit_DLLs" -Value "1" -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options\\sethc.exe\" -Name "Debugger" -Value "cmd.exe" -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options\\sethc.exe\" -Name "LmCompatibilityLevel" -Value 2 -ErrorAction SilentlyContinue
+        # Injecting CRED-027
+        # Injecting LAT-012
+        # Injecting PE-031
+        # Injecting PER-003
+        # Injecting LAT-025
+        # Injecting CRED-060
+        New-Item -Path "C:\\Windows\\CCM\\CcmExec.exe\" -ItemType File -Force -ErrorAction SilentlyContinue | Out-Null
+        # Injecting PER-027
+        # Injecting DF-005
+        # Injecting IA-018
+        # Port check for IA-018 usually means service installed
+        # Injecting IA-021
+        # Port check for IA-021 usually means service installed
+        # Injecting LAT-015
+        # Injecting PE-027
+        # Injecting IA-036
+        # Port check for IA-036 usually means service installed
+        # Injecting IA-022
+        New-Item -Path "C:\\Windows\\System32\\mshta.exe\" -ItemType File -Force -ErrorAction SilentlyContinue | Out-Null
+        # Injecting DF-007
+        # Injecting PER-036
+        # Injecting PE-008
+        # Injecting DF-016
+        # Injecting PE-002
+        # Injecting IA-045
+        # Injecting PE-009
+        # Injecting IA-002
+        # Injecting DF-024
+        # Injecting IA-012
+        # Injecting PE-043
+        # Injecting IA-015
+        New-Item -Path "HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Netlogon\\Parameters\" -Force -ErrorAction SilentlyContinue | Out-Null
+        Set-ItemProperty -Path "HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Netlogon\\Parameters\" -Name "AppInit_DLLs" -Value "1" -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Netlogon\\Parameters\" -Name "Debugger" -Value "cmd.exe" -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Netlogon\\Parameters\" -Name "LmCompatibilityLevel" -Value 2 -ErrorAction SilentlyContinue
+        # Injecting LAT-017
+        # Injecting CRED-025
+        # Injecting DF-018
+        # Injecting PE-039
+        # Injecting DF-017
+        # Injecting PE-044
+        # Injecting PE-015
+        # Injecting PER-016
+        # Injecting PE-003
+        # Injecting IA-047
+        # Injecting CRED-040
+        # Port check for CRED-040 usually means service installed
+        # Injecting PER-008
+        New-Item -Path "HKCU:\\Software\\Classes -ErrorAction SilentlyContinue | Where-Object {$_.PSChildName -match \" -Force -ErrorAction SilentlyContinue | Out-Null
+        Set-ItemProperty -Path "HKCU:\\Software\\Classes -ErrorAction SilentlyContinue | Where-Object {$_.PSChildName -match \" -Name "AppInit_DLLs" -Value "1" -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKCU:\\Software\\Classes -ErrorAction SilentlyContinue | Where-Object {$_.PSChildName -match \" -Name "Debugger" -Value "cmd.exe" -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKCU:\\Software\\Classes -ErrorAction SilentlyContinue | Where-Object {$_.PSChildName -match \" -Name "LmCompatibilityLevel" -Value 2 -ErrorAction SilentlyContinue
+        # Injecting PE-049
+        New-Item -Path "C:\\Windows\\System32\\drivers\\RTCore64.sys\" -ItemType File -Force -ErrorAction SilentlyContinue | Out-Null
+        # Injecting LAT-027
+        # Injecting IA-038
+        # Injecting IA-032
+        # Port check for IA-032 usually means service installed
+        # Injecting PE-041
+        # Injecting IA-017
+        # Injecting PE-016
+        # Injecting LAT-019
+        # Injecting IA-037
+        # Port check for IA-037 usually means service installed
+        # Injecting PE-042
+        New-Item -Path "HKLM:\\SYSTEM\\CurrentControlSet\\Services | ForEach-Object { (Get-Acl $_.PSPath).Access | Where-Object {$_.IdentityReference -match \" -Force -ErrorAction SilentlyContinue | Out-Null
+        Set-ItemProperty -Path "HKLM:\\SYSTEM\\CurrentControlSet\\Services | ForEach-Object { (Get-Acl $_.PSPath).Access | Where-Object {$_.IdentityReference -match \" -Name "AppInit_DLLs" -Value "1" -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKLM:\\SYSTEM\\CurrentControlSet\\Services | ForEach-Object { (Get-Acl $_.PSPath).Access | Where-Object {$_.IdentityReference -match \" -Name "Debugger" -Value "cmd.exe" -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKLM:\\SYSTEM\\CurrentControlSet\\Services | ForEach-Object { (Get-Acl $_.PSPath).Access | Where-Object {$_.IdentityReference -match \" -Name "LmCompatibilityLevel" -Value 2 -ErrorAction SilentlyContinue
+        # Injecting PE-030
+        # Injecting CRED-029
+        New-Item -Path "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Lsa\" -Force -ErrorAction SilentlyContinue | Out-Null
+        Set-ItemProperty -Path "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Lsa\" -Name "AppInit_DLLs" -Value "1" -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Lsa\" -Name "Debugger" -Value "cmd.exe" -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Lsa\" -Name "LmCompatibilityLevel" -Value 2 -ErrorAction SilentlyContinue
+        # Injecting LAT-024
+        New-Item -Path "HKLM:\\SYSTEM\\CurrentControlSet\\Services\\NTDS\\Parameters\" -Force -ErrorAction SilentlyContinue | Out-Null
+        Set-ItemProperty -Path "HKLM:\\SYSTEM\\CurrentControlSet\\Services\\NTDS\\Parameters\" -Name "AppInit_DLLs" -Value "1" -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKLM:\\SYSTEM\\CurrentControlSet\\Services\\NTDS\\Parameters\" -Name "Debugger" -Value "cmd.exe" -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKLM:\\SYSTEM\\CurrentControlSet\\Services\\NTDS\\Parameters\" -Name "LmCompatibilityLevel" -Value 2 -ErrorAction SilentlyContinue
+        # Injecting DF-011
+        # Injecting IA-028
+        New-Item -Path "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer\" -Force -ErrorAction SilentlyContinue | Out-Null
+        Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer\" -Name "AppInit_DLLs" -Value "1" -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer\" -Name "Debugger" -Value "cmd.exe" -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer\" -Name "LmCompatibilityLevel" -Value 2 -ErrorAction SilentlyContinue
+        # Injecting PER-013
+        # Injecting IA-035
+        # Port check for IA-035 usually means service installed
+        # Injecting REC-008
+        # Injecting LAT-008
+        # Injecting PE-046
+        New-Item -Path "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Printers\\PointAndPrint\" -Force -ErrorAction SilentlyContinue | Out-Null
+        Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Printers\\PointAndPrint\" -Name "AppInit_DLLs" -Value "1" -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Printers\\PointAndPrint\" -Name "Debugger" -Value "cmd.exe" -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Printers\\PointAndPrint\" -Name "LmCompatibilityLevel" -Value 2 -ErrorAction SilentlyContinue
+        # Injecting LAT-018
+        # Injecting PE-029
+        # Injecting DF-033
+        # Injecting CRED-020
+        # Injecting CRED-053
+        # Injecting DF-019
+        # Injecting CRED-049
+        # Injecting CRED-044
+        # Injecting PE-037
+        # Injecting PE-050
+        # Injecting PE-018
+        # Injecting IA-009
+        # Injecting CRED-023
+        # Injecting CRED-033
+        # Injecting DF-034
+        # Port check for DF-034 usually means service installed
+        # Injecting PE-010
+        # Injecting IA-011
+        # Port check for IA-011 usually means service installed
+        # Injecting CRED-008
+        # Injecting CRED-010

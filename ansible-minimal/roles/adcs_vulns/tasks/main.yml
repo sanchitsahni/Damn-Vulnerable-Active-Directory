@@ -29,7 +29,7 @@
     Install-AdcsWebEnrollment -Force
   ignore_errors: yes
 
-- name: Configure vulnerable templates via PowerShell
+- name: Create vulnerable templates via PowerShell on DC
   ansible.windows.win_shell: |
     Import-Module ActiveDirectory
     $configNC = (Get-ADRootDSE).configurationNamingContext
@@ -41,6 +41,8 @@
       @{Name="ESC2"; Flags=0x00000000; EnrollFlag=0x00000009; NameFlag=0x00000001; EKU="2.5.29.37.0"; ACL="D:AI(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;WD)"},
       @{Name="ESC3"; Flags=0x00000000; EnrollFlag=0x00000009; NameFlag=0x00000001; EKU="1.3.6.1.4.1.311.20.2.1"; ACL="D:AI(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;WD)"},
       @{Name="ESC4"; Flags=0x00000000; EnrollFlag=0x00000009; NameFlag=0x00000000; EKU="1.3.6.1.5.5.7.3.2"; ACL="D:AI(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;WD)"},
+      @{Name="ESC5"; Flags=0x00000000; EnrollFlag=0x00000009; NameFlag=0x00000000; EKU="1.3.6.1.5.5.7.3.2"; ACL="D:AI(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;WD)"},
+      @{Name="ESC7"; Flags=0x00000000; EnrollFlag=0x00000009; NameFlag=0x00000000; EKU="1.3.6.1.5.5.7.3.2"; ACL="D:AI(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;WD)"},
       @{Name="ESC9"; Flags=0x00000000; EnrollFlag=0x00000009; NameFlag=0x00000001; EKU="1.3.6.1.5.5.7.3.2"; ACL="D:AI(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;WD)"},
       @{Name="ESC10"; Flags=0x00000000; EnrollFlag=0x00000009; NameFlag=0x00000001; EKU="1.3.6.1.5.5.7.3.2"; ACL="D:AI(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;WD)"},
       @{Name="ESC11"; Flags=0x00000000; EnrollFlag=0x00000009; NameFlag=0x00000001; EKU="1.3.6.1.5.5.7.3.2"; ACL="D:AI(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;WD)"},
@@ -53,14 +55,14 @@
     foreach ($t in $templates) {
       if (-not (Get-ADObject -Filter "name -eq '$($t.Name)'" -SearchBase $tmplPath)) {
         $props = @{
-          objectClass = "pKICertificateTemplate"
-          name = $t.Name
-          displayName = $t.Name
-          flags = 0x00000000
-          msPKI-Enrollment-Flag = $t.EnrollFlag
-          msPKI-Certificate-Name-Flag = $t.NameFlag
-          pKIExtendedKeyUsage = $t.EKU
-          revision = 1
+          "objectClass" = "pKICertificateTemplate"
+          "name" = $t.Name
+          "displayName" = $t.Name
+          "flags" = 0x00000000
+          "msPKI-Enrollment-Flag" = $t.EnrollFlag
+          "msPKI-Certificate-Name-Flag" = $t.NameFlag
+          "pKIExtendedKeyUsage" = $t.EKU
+          "revision" = 1
         }
         $obj = New-ADObject -Name $t.Name -Type pKICertificateTemplate -Path $tmplPath -OtherAttributes $props -PassThru
         
@@ -70,22 +72,45 @@
         $sd.GetBinaryForm($sdBytes, 0)
         Set-ADObject -Identity $obj -Replace @{ntSecurityDescriptor=$sdBytes}
       }
-      # Publish to CA
-      try { Add-CATemplate -Name $t.Name -Force -ErrorAction SilentlyContinue } catch {}
     }
+  delegate_to: dc01.corp.local
+  ignore_errors: yes
+
+- name: Publish vulnerable templates to CA
+  ansible.windows.win_shell: |
+    $names = "ESC1,ESC2,ESC3,ESC4,ESC5,ESC7,ESC9,ESC10,ESC11,ESC12,ESC13,ESC14,ESC15"
+    certutil -SetCAtemplates +$names
+    Restart-Service certsvc -ErrorAction SilentlyContinue
 
     # Enable ESC6 (EDITF_ATTRIBUTESUBJECTALTNAME2) on the CA
-    certutil -setreg policy\EditFlags +EDITF_ATTRIBUTESUBJECTALTNAME2
+    certutil -setreg policy\EditFlags "+EDITF_ATTRIBUTESUBJECTALTNAME2"
     Restart-Service certsvc
   ignore_errors: yes
 
-- name: Configure ESC9/ESC10 via registry and ACL
+- name: Configure ESC9 via AD registry
   ansible.windows.win_shell: |
     # ESC9 - No security extension + ENROLLEE_SUPPLIES_SUBJECT
     Set-ADObject -Identity "CN=ESC9,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,DC=corp,DC=local" -Replace @{"msPKI-Certificate-Name-Flag"=@(1)} -ErrorAction SilentlyContinue
+  delegate_to: dc01.corp.local
+  ignore_errors: yes
+
+- name: Configure ESC10 via registry
+  ansible.windows.win_shell: |
     # ESC10 - Allow NTLM relay through web enrollment
     $caKey = Get-ChildItem "HKLM:\System\CurrentControlSet\Services\CertSvc\Configuration" | Where-Object { $_.PSChildName -ne "Restored" } | Select-Object -First 1
     if ($caKey) {
       Set-ItemProperty -Path $caKey.PSPath -Name "EditFlags" -Value 0x00040000 -ErrorAction SilentlyContinue
     }
+  ignore_errors: yes
+
+- name: Configure ESC8 (NTLM relay to web enrollment)
+  ansible.windows.win_shell: |
+    Import-Module WebAdministration
+    $certSrv = "IIS:\Sites\Default Web Site\CertSrv"
+    if (Test-Path $certSrv) {
+      Set-WebConfigurationProperty -Filter /system.webServer/security/authentication/windowsAuthentication -Name enabled -Value true -PSPath $certSrv -ErrorAction SilentlyContinue
+      Set-WebConfigurationProperty -Filter /system.webServer/security/authentication/anonymousAuthentication -Name enabled -Value false -PSPath $certSrv -ErrorAction SilentlyContinue
+      Set-ItemProperty -Path $certSrv -Name "extendedProtection" -Value "Off" -ErrorAction SilentlyContinue
+    }
+    Restart-Service W3Svc -ErrorAction SilentlyContinue
   ignore_errors: yes

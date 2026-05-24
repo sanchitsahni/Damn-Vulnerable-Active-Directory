@@ -148,3 +148,5 @@ flags/*.generated.json
 # --- Reports ---
 vulnerability_report*.csv
 
+vulnerability_report.csv
+missing_checks.json

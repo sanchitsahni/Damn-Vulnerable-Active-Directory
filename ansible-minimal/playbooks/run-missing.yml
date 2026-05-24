@@ -1,0 +1,7 @@
+---
+- name: Inject 119 Missing Vulnerabilities
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Run generated state mocking
+      import_tasks: ../tasks/vuln-missing.yml

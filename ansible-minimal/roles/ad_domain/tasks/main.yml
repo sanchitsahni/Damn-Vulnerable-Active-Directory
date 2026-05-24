@@ -132,10 +132,12 @@
     }
   when: inventory_hostname == 'dc01.corp.local'
 
-- name: Create OUs
+- name: Create AD objects and set rights
   ansible.windows.win_shell: |
     Import-Module ActiveDirectory
     $domain = "{{ domain_name }}"
+    
+    # 1. Create OUs and Groups
     New-ADOrganizationalUnit -Name "ServiceAccounts" -Path "DC=corp,DC=local" -ProtectedFromAccidentalDeletion $false -ErrorAction SilentlyContinue
     New-ADOrganizationalUnit -Name "Computers" -Path "DC=corp,DC=local" -ProtectedFromAccidentalDeletion $false -ErrorAction SilentlyContinue
     New-ADOrganizationalUnit -Name "Servers" -Path "DC=corp,DC=local" -ProtectedFromAccidentalDeletion $false -ErrorAction SilentlyContinue
@@ -145,12 +147,8 @@
     New-ADGroup -Name "IT Admins" -SamAccountName "IT Admins" -GroupCategory Security -GroupScope Global -Path "OU=Restricted,DC=corp,DC=local" -ErrorAction SilentlyContinue
     New-ADGroup -Name "SQL Admins" -SamAccountName "SQL Admins" -GroupCategory Security -GroupScope Global -Path "OU=ServiceAccounts,DC=corp,DC=local" -ErrorAction SilentlyContinue
     New-ADGroup -Name "Developers" -SamAccountName "Developers" -GroupCategory Security -GroupScope Universal -Path "OU=Restricted,DC=corp,DC=local" -ErrorAction SilentlyContinue
-  when: inventory_hostname == 'dc01.corp.local'
-  ignore_errors: yes
 
-- name: Create domain users
-  ansible.windows.win_shell: |
-    Import-Module ActiveDirectory
+    # 2. Create domain users
     $users = @(
       @{Name="attacker"; Password="{{ domain_admin_password }}"; Groups=@("Domain Users", "Remote Desktop Users")},
       @{Name="user1"; Password="Password123!"; Groups=@("Domain Users")},
@@ -181,7 +179,7 @@
         Path = "CN=Users,DC=corp,DC=local"
       }
       if ($u.ContainsKey("Description")) { $params.Description = $u.Description }
-      try { New-ADUser @params -ErrorAction SilentlyContinue } catch { Write-Host "User $($u.Name) may exist" }
+      try { New-ADUser @params -ErrorAction SilentlyContinue } catch {}
       if ($u.ContainsKey("SPN")) { Set-ADUser -Identity $u.Name -ServicePrincipalNames @{Add=$u.SPN} -ErrorAction SilentlyContinue }
       if ($u.ContainsKey("NoPreAuth") -and $u.NoPreAuth) { Set-ADAccountControl -Identity $u.Name -DoesNotRequirePreAuth $true -ErrorAction SilentlyContinue }
       if ($u.ContainsKey("Reversible") -and $u.Reversible) { Set-ADUser -Identity $u.Name -AllowReversiblePasswordEncryption $true -ErrorAction SilentlyContinue }
@@ -189,11 +187,8 @@
         try { Add-ADGroupMember -Identity $g -Members $u.Name } catch {}
       }
     }
-  when: inventory_hostname == 'dc01.corp.local'
-  ignore_errors: yes
 
-- name: Set DCSync rights for sync_user
-  ansible.windows.win_shell: |
+    # 3. Set DCSync rights for sync_user
     $user = Get-ADUser -Identity "sync_user"
     $acl = Get-ACL "AD:\DC=corp,DC=local"
     $sid = [System.Security.Principal.SecurityIdentifier] $user.SID
@@ -204,4 +199,7 @@
     $acl.AddAccessRule($rule1)
     $acl.AddAccessRule($rule2)
     Set-ACL "AD:\DC=corp,DC=local" $acl
+
+    exit 0
   when: inventory_hostname == 'dc01.corp.local'
+  ignore_errors: yes

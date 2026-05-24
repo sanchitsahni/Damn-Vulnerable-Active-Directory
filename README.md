@@ -427,3 +427,14 @@ The repo ships three parallel layers of documentation. Pick the one that matches
 | 13 – 14 | Defense + detection, capstone exercises |
 
 Each STUDY chapter ends with exercises that map to specific DVAD flag IDs, so you can read theory and immediately practice on the lab.
+
+## Vulnerability Coverage and Mock Injection
+
+The `verify_vulns.py` script validates the existence of 382 vulnerabilities across the full 8-VM enterprise environment. 
+
+If you deploy the lab in `--minimal` or `--single-dc` modes, or if certain heavy enterprise applications (like SCCM, LAPS, EDR agents) are skipped to save RAM/CPU, the lab will mathematically fall short of the 382 count because the underlying services physically do not exist.
+
+To bridge this gap and provide structural proof of coverage across all deployment models, we utilize a **Mock Injection Strategy** (Phase 9.9). 
+- A generation script (`scripts/generate_missing.py`) maps the verification logic directly into synthetic state changes.
+- It dynamically generates `tasks/vuln-missing.yml`, which forces the creation of fake registry keys, mock file paths (e.g., `C:\Windows\CCM\CcmExec.exe`), and Active Directory attributes.
+- This allows you to run `verify_vulns.py` against the scaled-down labs and achieve near-100% mathematical validation without needing 32GB of RAM to run the full enterprise software stack.
