@@ -10,6 +10,12 @@
 *.mon
 *.installed
 *.log
+.gitignore 
+CLAUDE.md
+PLAN.md
+PRD.md
+vulnerability_report.csv
+.antigravitycli/
 
 # --- Windows install media (very large; download via deploy.sh) ---
 /media/

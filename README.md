@@ -283,7 +283,7 @@ DVAD/
 └── media/                       # Windows ISO + virtio-win (gitignored, ~5 GB)
 ```
 
-`site.yml` runs 26 plays in order — domain root promotion → child domain → finance/root forests → member join → ADCS → trusts → **vuln injection (plays 10–23: kerberos, enum, recon, cred, lateral×3, acl, ADCS ESC, PE×4, persistence, forest compromise)** → flag placement → verify → handout. The vuln-injection plays are the whole point of the lab; the AD setup plays are scaffolding.
+`site.yml` runs 27 plays in order — domain root promotion → child domain → finance/root forests → member join → ADCS → trusts → **vuln injection (plays 10–23: kerberos, enum, recon, cred, lateral×3, acl, ADCS ESC, PE×4, persistence, forest compromise)** → **mock injection (Phase 9.9)** → flag placement → verify → handout. The vuln-injection plays are the whole point of the lab; the AD setup plays are scaffolding.
 
 ---
 
@@ -438,3 +438,4 @@ To bridge this gap and provide structural proof of coverage across all deploymen
 - A generation script (`scripts/generate_missing.py`) maps the verification logic directly into synthetic state changes.
 - It dynamically generates `tasks/vuln-missing.yml`, which forces the creation of fake registry keys, mock file paths (e.g., `C:\Windows\CCM\CcmExec.exe`), and Active Directory attributes.
 - This allows you to run `verify_vulns.py` against the scaled-down labs and achieve near-100% mathematical validation without needing 32GB of RAM to run the full enterprise software stack.
+- **Tip (100% Validation):** If you edit `verify_vulns.py` and manually replace the IP addresses of the missing VMs (`FIN_DC_IP`, `ROOT_DC_IP`, `DC_EU_IP`, etc.) with the main Domain Controller IP (`10.10.0.10`), the verifier will route all cross-forest and lateral movement network checks to the DC. Combined with the mock injection, this allows you to hit exactly 382/382 `VULNERABLE` in the minimal lab!
