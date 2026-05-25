@@ -4,7 +4,7 @@ A reproducible, multi-forest Windows Active Directory lab that is **intentionall
 
 > **DVAD is the lab equivalent of [Damn Vulnerable Web App](https://github.com/digininja/DVWA) for the Windows enterprise.** Every "bug" is a feature. Do not deploy on a network you do not own.
 
-**Project:** <https://github.com/sanchitsahni/Damn-Vunerable-Active-Directory>  ·  **Issues:** <https://github.com/sanchitsahni/Damn-Vunerable-Active-Directory/issues>  ·  **Use:** research / training only — treat every VM as hostile
+**Project:** <https://github.com/sanchitsahni/Damn-Vunerable-Active-Directory>  ·  **Issues:** <https://github.com/sanchitsahni/Damn-Vulnerable-Active-Directory/issues>  ·  **Use:** research / training only — treat every VM as hostile
 
 ---
 
