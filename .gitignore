@@ -156,3 +156,6 @@ vulnerability_report*.csv
 
 vulnerability_report.csv
 missing_checks.json
+
+# --- AI Agent State ---
+.antigravitycli/
