@@ -49,7 +49,7 @@ detect_os() {
     OS_VERSION="${VERSION_ID:-unknown}"
 
     case "$OS_ID" in
-        ubuntu|debian|linuxmint|pop)  PKG_MGR="apt";  ;;
+        ubuntu|debian|linuxmint|pop|kali)  PKG_MGR="apt";  ;;
         fedora|rhel|centos|rocky|alma) PKG_MGR="dnf";  ;;
         arch|manjaro|endeavouros)      PKG_MGR="pacman";;
         opensuse*|sles)                PKG_MGR="zypper";;
@@ -63,15 +63,15 @@ install_dependencies() {
     log "Installing required dependencies..."
     case "$PKG_MGR" in
         apt)
-            sudo apt-get update -qq
-            sudo apt-get install -y -qq \
+            sudo apt-get update -qq || sudo apt-get update --fix-missing
+            sudo apt-get install -y --fix-missing \
                 qemu-system-x86 qemu-utils qemu-kvm \
                 libvirt-daemon-system libvirt-clients bridge-utils \
-                virt-manager ansible python3 python3-pip \
+                ansible python3 python3-pip \
                 python3-libvirt swtpm ovmf \
-                cloud-image-utils genisoimage wget curl \
-                jq unzip p7zip-full nftables dnsmasq \
-                aria2 openssh-client git 2>/dev/null || sudo apt-get install -y -qq \
+                genisoimage wget curl \
+                jq unzip nftables dnsmasq \
+                aria2 openssh-client git 2>/dev/null || sudo apt-get install -y --fix-missing \
                 qemu-system-x86 qemu-utils qemu-kvm \
                 libvirt-daemon-system libvirt-clients bridge-utils \
                 ansible python3 python3-pip genisoimage wget curl jq unzip aria2 openssh-client git
@@ -86,14 +86,14 @@ install_dependencies() {
             ;;
         pacman)
             sudo pacman -S --noconfirm \
-                qemu-desktop libvirt virt-manager swtpm edk2-ovmf \
+                qemu-desktop libvirt swtpm edk2-ovmf \
                 ansible python-pip cdrtools wget curl jq unzip aria2 \
                 nftables dnsmasq openssh git
             sudo systemctl enable --now libvirtd 2>/dev/null || true
             ;;
         zypper)
             sudo zypper install -y \
-                qemu-kvm qemu-tools libvirt virt-manager \
+                qemu-kvm qemu-tools libvirt \
                 ansible python3-pip swtpm ovmf \
                 genisoimage wget curl jq unzip aria2 \
                 nftables dnsmasq openssh-clients git
