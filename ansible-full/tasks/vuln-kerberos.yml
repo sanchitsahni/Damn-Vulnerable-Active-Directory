@@ -4,31 +4,31 @@
 # Target: dc01.corp.local
 # ==============================================================================
 
-- name: Set DoesNotRequirePreAuth on svc_nospreauth (AS-REP Roasting)
+- name: Set DoesNotRequirePreAuth on svc_thanos (AS-REP Roasting)
   win_shell: |
     Import-Module ActiveDirectory
-    Set-ADAccountControl -Identity "svc_nospreauth" -DoesNotRequirePreAuth $true
+    Set-ADAccountControl -Identity "svc_thanos" -DoesNotRequirePreAuth $true
   ignore_errors: yes
 
 - name: Register SPNs for Kerberoast targets
   win_shell: |
     Import-Module ActiveDirectory
-    Set-ADUser -Identity "svc_web" -ServicePrincipalNames @{Add="HTTP/web.corp.local"} -ErrorAction SilentlyContinue
-    Set-ADUser -Identity "svc_sql" -ServicePrincipalNames @{Add="MSSQLSvc/sql01.corp.local:1433"} -ErrorAction SilentlyContinue
+    Set-ADUser -Identity "svc_vision" -ServicePrincipalNames @{Add="HTTP/web.corp.local"} -ErrorAction SilentlyContinue
+    Set-ADUser -Identity "svc_jarvis" -ServicePrincipalNames @{Add="MSSQLSvc/sql01.corp.local:1433"} -ErrorAction SilentlyContinue
   ignore_errors: yes
 
 - name: Enable AES encryption for rc4-hash downgrade demonstration
   win_shell: |
     Import-Module ActiveDirectory
-    $user = Get-ADUser -Filter {name -eq "svc_web"} -Properties msDS-SupportedEncryptionTypes
-    Set-ADUser -Identity "svc_web" -Replace @{"msDS-SupportedEncryptionTypes"=0x1}  # RC4 only
+    $user = Get-ADUser -Filter {name -eq "svc_vision"} -Properties msDS-SupportedEncryptionTypes
+    Set-ADUser -Identity "svc_vision" -Replace @{"msDS-SupportedEncryptionTypes"=0x1}  # RC4 only
   ignore_errors: yes
 
-- name: Configure constrained delegation on svc_web
+- name: Configure constrained delegation on svc_vision
   win_shell: |
     Import-Module ActiveDirectory
-    Set-ADAccountControl -Identity "svc_web" -TrustedToAuthForDelegation $true
-    Set-ADUser -Identity "svc_web" -Add @{msDS-AllowedToDelegateTo="HTTP/ws01.corp.local"}
+    Set-ADAccountControl -Identity "svc_vision" -TrustedToAuthForDelegation $true
+    Set-ADUser -Identity "svc_vision" -Add @{msDS-AllowedToDelegateTo="HTTP/ws01.corp.local"}
   ignore_errors: yes
 
 - name: Configure unconstrained delegation on FILE01
@@ -45,11 +45,11 @@
     Set-ADAccountControl -Identity $comp -TrustedForDelegation $true
   ignore_errors: yes
 
-- name: Configure RBCD on sql01 for svc_web
+- name: Configure RBCD on sql01 for svc_vision
   win_shell: |
     Import-Module ActiveDirectory
     $comp = Get-ADComputer -Identity "SQL01"
-    $svc = Get-ADUser -Identity "svc_web"
+    $svc = Get-ADUser -Identity "svc_vision"
     $sid = New-Object System.Security.Principal.SecurityIdentifier ($svc.SID)
     $raw = New-Object byte[] $sid.BinaryLength
     $sid.GetBinaryForm($raw,0)

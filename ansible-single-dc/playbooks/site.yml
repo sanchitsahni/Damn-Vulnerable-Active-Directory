@@ -257,8 +257,6 @@
   hosts: ws01.corp.local
   gather_facts: yes
   tasks:
-    - name: Configure attacker workstation
-      import_tasks: ../tasks/vuln-attacker-host.yml
     - name: Configure PE surfaces on ws01
       import_tasks: ../tasks/vuln-privesc-ws01.yml
 

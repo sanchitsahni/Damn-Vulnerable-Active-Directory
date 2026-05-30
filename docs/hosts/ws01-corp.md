@@ -30,7 +30,6 @@ The **victim workstation**. This is where phishing lands, where users' tokens li
 | SAM/SYSTEM/SECURITY readable by Users | yes (CRED-006) — `reg save` without SeBackup |
 | `CorpSync` scheduled task with `C:\VulnTasks` Users:F | yes (PE-005) |
 | Vulnerable-driver staging dir `C:\DVAD\drivers` | yes (BYOVD) |
-| `CORP\attacker` in local Administrators | yes — once you're "attacker" (any escalation route), you're admin |
 | Pre-staged ADIDNS A record `new-fileserver.corp.local → 10.10.0.100` | yes (PER-030) |
 
 ## Minimum enum sweep (after landing here via phishing/RCE/LPE)
@@ -58,10 +57,10 @@ whoami /priv | findstr Impersonate
 
 ```bash
 W=10.10.0.100
-nxc smb $W -u alice -p 'DVADlab2024!' --shares
-nxc smb $W -u alice -p 'DVADlab2024!' --loggedon-users   # see who's there
+nxc smb $W -u peter.parker -p 'DVADlab2024!' --shares
+nxc smb $W -u peter.parker -p 'DVADlab2024!' --loggedon-users   # see who's there
 # Hash-leak via bait file:
-smbclient //$W/PublicShare -U alice%'DVADlab2024!' -c 'get HR-Documents.scf'
+smbclient //$W/PublicShare -U peter.parker%'DVADlab2024!' -c 'get HR-Documents.scf'
 # Phishing landing scenarios:
 #   • email with .library-ms in ZIP (IA-024)
 #   • .lnk in PublicShare → user double-clicks (IA-020)

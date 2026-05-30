@@ -25,7 +25,7 @@
 
 # ------------------------------------------------------------------------------
 # DF-002: Silver Ticket - service account hash + SPN.
-# svc_sql / svc_web / svc_backup with weak Kerberoastable passwords already
+# svc_jarvis / svc_vision / svc_backup with weak Kerberoastable passwords already
 # wired in CRED-001..CRED-006. Ensure HOST and CIFS SPNs exist on FILE01$ so
 # Silver tickets for CIFS/HOST are forgeable once an attacker has the
 # computer account hash.
@@ -44,15 +44,15 @@
 
 # ------------------------------------------------------------------------------
 # DF-003: DCSync All Hashes - Replicating Directory Changes / All / In Filtered
-# Set granted to sync_user in CRED-007. Re-verify here.
+# Set granted to doctor.strange in CRED-007. Re-verify here.
 # ------------------------------------------------------------------------------
-- name: DF-003 - Verify sync_user holds DCSync rights
+- name: DF-003 - Verify doctor.strange holds DCSync rights
   ansible.windows.win_shell: |
     Import-Module ActiveDirectory
     try {
-      $u = Get-ADUser sync_user -ErrorAction Stop
-      Write-Host "sync_user present: $($u.DistinguishedName)"
-    } catch { Write-Host "sync_user missing - check CRED-007" }
+      $u = Get-ADUser doctor.strange -ErrorAction Stop
+      Write-Host "doctor.strange present: $($u.DistinguishedName)"
+    } catch { Write-Host "doctor.strange missing - check CRED-007" }
   ignore_errors: yes
 
 # ------------------------------------------------------------------------------
@@ -190,14 +190,14 @@
 
 # ------------------------------------------------------------------------------
 # DF-010: Cross-forest Kerberoasting - set an SPN on a foreign-trust-reachable
-# service account with a weak password. Already partially covered by svc_sql
+# service account with a weak password. Already partially covered by svc_jarvis
 # in CRED. Add an SPN that's specifically reachable from finance.local.
 # ------------------------------------------------------------------------------
-- name: DF-010 - Add cross-forest-reachable SPN to svc_sql
+- name: DF-010 - Add cross-forest-reachable SPN to svc_jarvis
   ansible.windows.win_shell: |
     Import-Module ActiveDirectory
     try {
-      Set-ADUser -Identity svc_sql -ServicePrincipalNames @{Add='MSSQLSvc/sql01.corp.local:1433','MSSQLSvc/sql01.corp.local'} -ErrorAction SilentlyContinue
+      Set-ADUser -Identity svc_jarvis -ServicePrincipalNames @{Add='MSSQLSvc/sql01.corp.local:1433','MSSQLSvc/sql01.corp.local'} -ErrorAction SilentlyContinue
     } catch { Write-Host "SPN add: $($_.Exception.Message)" }
   ignore_errors: yes
 
@@ -284,15 +284,15 @@
   ignore_errors: yes
 
 # ------------------------------------------------------------------------------
-# DF-030: Schema Admin hijack - put helpdesk in Schema Admins (only valid
+# DF-030: Schema Admin hijack - put nick.fury in Schema Admins (only valid
 # group in the forest root). Needed for malicious schema attribute extension.
 # ------------------------------------------------------------------------------
-- name: DF-030 - Add helpdesk to Schema Admins
+- name: DF-030 - Add nick.fury to Schema Admins
   ansible.windows.win_shell: |
     Import-Module ActiveDirectory
     try {
-      Add-ADGroupMember -Identity 'Schema Admins' -Members 'helpdesk' -ErrorAction Stop
-      Write-Host "helpdesk added to Schema Admins"
+      Add-ADGroupMember -Identity 'Schema Admins' -Members 'nick.fury' -ErrorAction Stop
+      Write-Host "nick.fury added to Schema Admins"
     } catch { Write-Host "Schema Admins add: $($_.Exception.Message)" }
   ignore_errors: yes
 
@@ -387,14 +387,14 @@
   ignore_errors: yes
 
 # ------------------------------------------------------------------------------
-# DF-038: Foreign group membership escalation. Add FINANCE\helpdesk into a
+# DF-038: Foreign group membership escalation. Add FINANCE\nick.fury into a
 # corp.local group that has interesting rights (Server Operators from PE-057).
 # ------------------------------------------------------------------------------
 - name: DF-038 - Cross-forest FSP into corp.local Server Operators
   ansible.windows.win_shell: |
     Import-Module ActiveDirectory
     try {
-      $finHd = New-Object System.Security.Principal.NTAccount('FINANCE','helpdesk')
+      $finHd = New-Object System.Security.Principal.NTAccount('FINANCE','nick.fury')
       $sid = $finHd.Translate([System.Security.Principal.SecurityIdentifier]).Value
       $domDn = (Get-ADDomain).DistinguishedName
       $fspDn = "CN=$sid,CN=ForeignSecurityPrincipals,$domDn"
@@ -402,7 +402,7 @@
         New-ADObject -Name $sid -Type foreignSecurityPrincipal -Path "CN=ForeignSecurityPrincipals,$domDn" -ErrorAction SilentlyContinue
       }
       Add-ADGroupMember -Identity 'Server Operators' -Members $fspDn -ErrorAction SilentlyContinue
-      Write-Host "FINANCE\helpdesk FSP added to corp.local Server Operators"
+      Write-Host "FINANCE\nick.fury FSP added to corp.local Server Operators"
     } catch { Write-Host "DF-038 FSP: $($_.Exception.Message)" }
   ignore_errors: yes
 
@@ -437,7 +437,7 @@
     dest: 'C:\Flags\forest\df-003-dcsync.txt'
     content: |
       FLAG{DF-003_DCSYNC_ALL_HASHES}
-      Hint: sync_user holds Replicating Directory Changes.
+      Hint: doctor.strange holds Replicating Directory Changes.
   ignore_errors: yes
 
 - name: DF-005 - SID History flag

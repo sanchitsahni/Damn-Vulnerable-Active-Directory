@@ -70,27 +70,27 @@
 
 - name: Deploy AD object vulnerabilities (Merged)
   ansible.windows.win_shell: |
-    # Set up constrained delegation on svc_web
-    $user = Get-ADUser -Identity "svc_web"
-    Set-ADAccountControl -Identity "svc_web" -TrustedToAuthForDelegation $true
-    Set-ADUser -Identity "svc_web" -Add @{msDS-AllowedToDelegateTo="HTTP/ws01.corp.local"}
+    # Set up constrained delegation on svc_vision
+    $user = Get-ADUser -Identity "svc_vision"
+    Set-ADAccountControl -Identity "svc_vision" -TrustedToAuthForDelegation $true
+    Set-ADUser -Identity "svc_vision" -Add @{msDS-AllowedToDelegateTo="HTTP/ws01.corp.local"}
 
     # Set up unconstrained delegation on FILE01
     $comp = Get-ADComputer -Identity "file01"
     Set-ADAccountControl -Identity $comp -TrustedForDelegation $true
 
-    # Configure RBCD on ws01 for svc_web
+    # Configure RBCD on ws01 for svc_vision
     $ws01 = Get-ADComputer -Identity "ws01"
-    $svc = Get-ADComputer -Identity "svc_web"
+    $svc = Get-ADComputer -Identity "svc_vision"
     $sid = New-Object System.Security.Principal.SecurityIdentifier ($svc.SID)
     $raw = New-Object byte[] $sid.BinaryLength
     $sid.GetBinaryForm($raw,0)
     Set-ADComputer -Identity $ws01 -Replace @{'msDS-AllowedToActOnBehalfOfOtherIdentity'=$raw}
 
-    # Configure shadow credentials target (helpdesk can write msDS-KeyCredentialLink)
+    # Configure shadow credentials target (nick.fury can write msDS-KeyCredentialLink)
     $target = Get-ADUser -Identity "developer1"
     $acl = Get-ACL "AD:\$($target.DistinguishedName)"
-    $sidHD = [System.Security.Principal.SecurityIdentifier] (Get-ADUser -Identity "helpdesk").SID
+    $sidHD = [System.Security.Principal.SecurityIdentifier] (Get-ADUser -Identity "nick.fury").SID
     $rule = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sidHD, "WriteProperty", "Allow", [guid]"5b47d60f-6150-4db2-a45b-7f9779355d6c")
     $acl.AddAccessRule($rule)
     Set-ACL "AD:\$($target.DistinguishedName)" $acl
@@ -100,6 +100,6 @@
     New-Item -ItemType Directory -Path $scriptPath -Force | Out-Null
     '@echo off' | Out-File -FilePath "$scriptPath\login.bat" -Encoding ASCII
     'REM FLAG: REC-015 found credentials in script' | Out-File -FilePath "$scriptPath\login.bat" -Append -Encoding ASCII
-    'net use \\file01.corp.local\share /user:corp\svc_web WebSvc2025!' | Out-File -FilePath "$scriptPath\login.bat" -Append -Encoding ASCII
+    'net use \\file01.corp.local\share /user:corp\svc_vision WebSvc2025!' | Out-File -FilePath "$scriptPath\login.bat" -Append -Encoding ASCII
   when: inventory_hostname == 'dc01.corp.local'
   ignore_errors: yes

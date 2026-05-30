@@ -42,18 +42,18 @@
 
 # ------------------------------------------------------------------------------
 # LAT-017 / LAT-018 / LAT-019 / LAT-020 / LAT-021 / LAT-022:
-# ACL chains. vuln-acl.yml already covers GenericAll (user1->user2), WriteSPN
-# (helpdesk->svc_web), AddSelf (qa_user->IT Admins), ForceChangePassword
-# (developer1->helpdesk), AdminSDHolder write (user3), and GenericAll on
+# ACL chains. vuln-acl.yml already covers GenericAll (peter.parker->tony.stark), WriteSPN
+# (nick.fury->svc_vision), AddSelf (qa_user->Avengers Admins), ForceChangePassword
+# (developer1->nick.fury), AdminSDHolder write (steve.rogers), and GenericAll on
 # computer accounts (attacker->FILE01/SQL01). Fill in the two missing pieces:
-#   LAT-018: GenericWrite on "IT Admins" group for "Help Desk"
-#   LAT-020: WriteOwner on "Domain Admins" for helpdesk
+#   LAT-018: GenericWrite on "Avengers Admins" group for "SHIELD Agents"
+#   LAT-020: WriteOwner on "Domain Admins" for nick.fury
 # ------------------------------------------------------------------------------
-- name: LAT-018 - Grant Help Desk GenericWrite over IT Admins group
+- name: LAT-018 - Grant SHIELD Agents GenericWrite over Avengers Admins group
   ansible.windows.win_shell: |
     Import-Module ActiveDirectory
-    $src = Get-ADGroup -Identity "Help Desk"
-    $tgt = Get-ADGroup -Identity "IT Admins"
+    $src = Get-ADGroup -Identity "SHIELD Agents"
+    $tgt = Get-ADGroup -Identity "Avengers Admins"
     $sid = New-Object System.Security.Principal.SecurityIdentifier ($src.SID)
     $acl = Get-ACL "AD:\$tgt"
     $rule = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sid, "WriteProperty", "Allow")
@@ -61,10 +61,10 @@
     Set-ACL "AD:\$tgt" $acl
   ignore_errors: yes
 
-- name: LAT-020 - Grant helpdesk WriteOwner on Domain Admins
+- name: LAT-020 - Grant nick.fury WriteOwner on Domain Admins
   ansible.windows.win_shell: |
     Import-Module ActiveDirectory
-    $src = Get-ADUser -Identity "helpdesk"
+    $src = Get-ADUser -Identity "nick.fury"
     $tgt = Get-ADGroup -Identity "Domain Admins"
     $sid = New-Object System.Security.Principal.SecurityIdentifier ($src.SID)
     $acl = Get-ACL "AD:\$tgt"
@@ -84,16 +84,16 @@
 
 # ------------------------------------------------------------------------------
 # LAT-034: Foreign Security Principal (cross-forest) into privileged group.
-# Add finance.local Administrator into corp.local "IT Admins". Real cross-forest
+# Add finance.local Administrator into corp.local "Avengers Admins". Real cross-forest
 # requires the trust to exist first; we rely on trust-setup.yml ordering.
 # ------------------------------------------------------------------------------
-- name: LAT-034 - Add finance.local Administrator to corp.local IT Admins
+- name: LAT-034 - Add finance.local Administrator to corp.local Avengers Admins
   ansible.windows.win_shell: |
     Import-Module ActiveDirectory
     try {
       # Resolve finance Administrator SID via trust
       $finAdminSid = (Get-ADUser -Server "finance.local" -Identity "Administrator" -ErrorAction Stop).SID
-      $tgt = Get-ADGroup -Identity "IT Admins"
+      $tgt = Get-ADGroup -Identity "Avengers Admins"
       # Add as a foreign principal
       $fsp = "CN=$($finAdminSid.Value),CN=ForeignSecurityPrincipals,DC=corp,DC=local"
       Add-ADGroupMember -Identity $tgt -Members $finAdminSid -ErrorAction SilentlyContinue
@@ -133,7 +133,7 @@
         LAT-016 RBCD chain                 -> CRED-017 + vuln-kerberos.yml
         LAT-017 ForceChangePassword        -> vuln-acl.yml
         LAT-019 KeyCredentialLink write    -> CRED-008
-        LAT-021 GenericAll on domain       -> CRED-013/014 (sync_user)
+        LAT-021 GenericAll on domain       -> CRED-013/014 (doctor.strange)
         LAT-022 WriteSPN                   -> vuln-acl.yml
         LAT-024 LDAP signing not required  -> REC-006 + CRED-048
         LAT-025 WebDAV / srvsvc coercion   -> CRED-022/049 (WebClient up)

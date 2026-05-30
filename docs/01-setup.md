@@ -163,7 +163,7 @@ Flag files land on disk at `C:\Flags\<id>.txt` on the host that's the natural ta
 | 6 | `tasks/adcs-setup.yml` + `roles/adcs_vulns` | Enterprise CA + ESC1/2/3/4/6/8/9/10/11/13/14/15/16 templates |
 | 7 | `tasks/vuln-recon.yml`, `vuln-cred-access.yml`, `vuln-kerberos.yml`, `vuln-adcs-esc.yml` | REC + CRED injection |
 | 8 | `vuln-lateral.yml`, `vuln-lateral-file01.yml`, `vuln-lateral-ws01.yml`, `vuln-acl.yml`, `vuln-privesc-*.yml` | LAT + PE injection |
-| 9 | `vuln-persistence.yml`, `vuln-forest-compromise.yml`, `vuln-attacker-host.yml` | PER + DF injection |
+| 9 | `vuln-persistence.yml`, `vuln-forest-compromise.yml` | PER + DF injection |
 | 10 | `tasks/flag-deployment.yml` + `roles/flag_factory` | Drop `C:\Flags\*.txt` per host |
 | 11 | `tasks/verify-lab.yml` | Sanity test |
 | 12 | `tasks/generate-handout.yml` | Build the participant handout |
@@ -212,7 +212,7 @@ vncviewer 127.0.0.1:5905
 
 ```bash
 evil-winrm -i 10.10.0.10  -u Administrator -p 'DVADlab2024!'
-evil-winrm -i 10.10.0.100 -u 'corp\alice'  -p 'DVADlab2024!'
+evil-winrm -i 10.10.0.100 -u 'corp\peter.parker'  -p 'DVADlab2024!'
 ```
 
 ### 5.3 RDP
@@ -228,11 +228,11 @@ xfreerdp /v:10.10.0.100 /u:Administrator /p:'DVADlab2024!' /size:1600x900 +clipb
 | Account | Password | Where |
 |---|---|---|
 | `Administrator` | `DVADlab2024!` | every VM |
-| `corp\alice` (Domain User) | `DVADlab2024!` | corp.local |
-| `corp\svc_web` (Kerberoastable) | `Summer2023!` | corp.local |
+| `corp\peter.parker` (Domain User) | `DVADlab2024!` | corp.local |
+| `corp\svc_vision` (Kerberoastable) | `Summer2023!` | corp.local |
 | `corp\svc_nopreauth` (AS-REP roastable) | `DVADlab2024!` | corp.local |
-| `corp\sync_user` (DCSync rights) | `DVADlab2024!` | corp.local |
-| `corp\backup_user` (Backup Operators, reversible pwd) | `DVADlab2024!` | corp.local |
+| `corp\doctor.strange` (DCSync rights) | `DVADlab2024!` | corp.local |
+| `corp\heimdall` (Backup Operators, reversible pwd) | `DVADlab2024!` | corp.local |
 | `krbtgt` | `KrbtgtDVAD2024!` | corp.local (reset for deterministic Golden) |
 | trust key | `TrustKey2024!` | every cross-forest trust |
 
@@ -290,7 +290,7 @@ pipx install bloodyAD
 ```bash
 nxc smb 10.10.0.0/21               # list responding hosts
 nxc smb 10.10.0.10 -u '' -p ''     # null bind smoke test
-kinit alice@CORP.LOCAL             # once you have a credential
+kinit peter.parker@CORP.LOCAL             # once you have a credential
 ```
 
 ### 6.5 If you do drop tools on `ws01` (after you've landed there)
@@ -313,7 +313,7 @@ This is for *post-exploitation* (Kerberos token games, LSASS dumps, on-host LPE)
 ### 6.6 BloodHound ingest (from Kali, after first credential)
 
 ```bash
-bloodhound-python -u alice -p 'DVADlab2024!' -d corp.local -ns 10.10.0.10 -c all
+bloodhound-python -u peter.parker -p 'DVADlab2024!' -d corp.local -ns 10.10.0.10 -c all
 # upload .json files into BloodHound CE
 ```
 

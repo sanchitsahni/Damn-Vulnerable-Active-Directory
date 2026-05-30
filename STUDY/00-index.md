@@ -265,7 +265,7 @@ We draw things like this:
 +--------------+         AS-REQ (encrypted with user's key)         +--------------+
 |              | --------------------------------------------------> |              |
 |   Client     |                                                      |     KDC      |
-|  (alice)     | <-------------------------------------------------- | (dc01.corp)  |
+|  (peter.parker)     | <-------------------------------------------------- | (dc01.corp)  |
 |              |   AS-REP (TGT encrypted with krbtgt's key + sess.)  |              |
 +--------------+                                                      +--------------+
 ```
@@ -575,7 +575,7 @@ No, but the references in each chapter point to talks (BlackHat, DEF CON, Troope
 - Will Schroeder + Lee Christensen — "Certified Pre-Owned" (ADCS ESC1-8)
 - Sean Metcalf — "Beyond Domain Admin" series
 - Benjamin Delpy — every mimikatz talk
-- Charlie Bromberg — coercion family talks
+- bruce.banner Bromberg — coercion family talks
 
 ### Q: How do I keep up after I finish?
 
@@ -665,7 +665,7 @@ Make sure the flag file is on the *right host* per PLAN.md. Some PE-* flags are 
 
 ### "ldapdomaindump won't authenticate"
 
-Double-check the user/password format: `corp\\alice` not `corp/alice`. Some versions are picky.
+Double-check the user/password format: `corp\\peter.parker` not `corp/peter.parker`. Some versions are picky.
 
 ---
 

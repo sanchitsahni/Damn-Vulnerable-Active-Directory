@@ -74,6 +74,7 @@
 # ==============================================================================
 - name: Configure Windows base settings on all hosts
   hosts: all
+  strategy: free
   gather_facts: yes
   tasks:
     - name: Import windows base role
@@ -100,25 +101,24 @@
     - name: Install AD DS and create child domain
       import_tasks: ../tasks/child-domain-setup.yml
 
-- name: Provision FINANCE.LOCAL Domain
-  hosts: dc01.finance.local
+- name: Provision External Forests (FINANCE.LOCAL and ROOT.CORP)
+  hosts: dc01.finance.local,dc01.root.corp
+  strategy: free
   gather_facts: yes
   tasks:
-    - name: Install AD DS and promote to DC
+    - name: Install AD DS and promote to DC (Finance)
       import_tasks: ../tasks/finance-domain-setup.yml
-
-- name: Provision ROOT.CORP Domain
-  hosts: dc01.root.corp
-  gather_facts: yes
-  tasks:
-    - name: Install AD DS and promote to DC
+      when: inventory_hostname == 'dc01.finance.local'
+    - name: Install AD DS and promote to DC (Root)
       import_tasks: ../tasks/root-domain-setup.yml
+      when: inventory_hostname == 'dc01.root.corp'
 
 # ==============================================================================
 # Phase 3: Join Member Servers to Domain
 # ==============================================================================
 - name: Join member servers to corp.local
   hosts: corp_servers,corp_workstation
+  strategy: free
   gather_facts: yes
   tasks:
     - name: Join domain corp.local
@@ -175,6 +175,7 @@
 # ==============================================================================
 - name: Inject Enumeration-Surface Services
   hosts: all
+  strategy: free
   gather_facts: yes
   tasks:
     - name: Configure ENUM-001..ENUM-080 surface services
@@ -258,8 +259,6 @@
   hosts: ws01.corp.local
   gather_facts: yes
   tasks:
-    - name: Configure attacker workstation
-      import_tasks: ../tasks/vuln-attacker-host.yml
     - name: Configure PE surfaces on ws01
       import_tasks: ../tasks/vuln-privesc-ws01.yml
 

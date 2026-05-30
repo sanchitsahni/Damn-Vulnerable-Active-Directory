@@ -23,7 +23,7 @@
       C:\SQL2019\SQLEXPR_x64_ENU.exe /ACTION=Install /QUIET /IACCEPTSQLSERVERLICENSETERMS `
         /FEATURES=SQLEngine /INSTANCENAME=MSSQLSERVER `
         /SQLSVCACCOUNT="NT AUTHORITY\SYSTEM" `
-        /SQLSYSADMINACCOUNTS="CORP\SQL Admins" "CORP\Domain Admins" `
+        /SQLSYSADMINACCOUNTS="CORP\Stark Tech DBAs" "CORP\Domain Admins" `
         /SECURITYMODE=SQL /SAPWD=$sa /TCPENABLED=1
     } else {
       Write-Host "SQL Express installer not staged. Skipping silent install."

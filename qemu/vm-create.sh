@@ -335,7 +335,11 @@ launch_vm() {
         -daemonize \
         -pidfile       "${VM_DIR}/${vm_name}.pid" \
         -monitor       "unix:${VM_DIR}/${vm_name}.mon,server,nowait" \
-        2>"${VM_DIR}/${vm_name}.log"
+        2>"${VM_DIR}/${vm_name}.log" || {
+            warn "$vm_name failed to start! Last log lines:"
+            cat "${VM_DIR}/${vm_name}.log" | sed 's/^/    /' || true
+            return 1
+        }
 
     # Wait up to 10 s for the PID file (daemonize is async)
     local waited=0
@@ -392,20 +396,25 @@ create_all_vms() {
     log "VMs to deploy: ${VMS_TO_DEPLOY[*]}"
 
     for vm_name in "${VMS_TO_DEPLOY[@]}"; do
-        parse_vm_def "$vm_name"
-        info "=== VM: $vm_name ($hostname) ==="
+        (
+            parse_vm_def "$vm_name"
+            info "=== VM: $vm_name ($hostname) ==="
 
-        # Generate autounattend
-        local auto_iso
-        auto_iso=$(generate_autounattend "$hostname" "$vm_name")
-        info "  Autounattend: $auto_iso"
+            # Generate autounattend
+            local auto_iso
+            auto_iso=$(generate_autounattend "$hostname" "$vm_name")
+            info "  Autounattend: $auto_iso"
 
-        # Create disk
-        create_disk "$vm_name" "$disk"
+            # Create disk
+            create_disk "$vm_name" "$disk"
 
-        # Launch VM
-        launch_vm "$vm_name" "$hostname" "$mac" "$ram" "$disk" "$vcpus" "$vnc" "$bridge" "$nic"
+            # Launch VM
+            launch_vm "$vm_name" "$hostname" "$mac" "$ram" "$disk" "$vcpus" "$vnc" "$bridge" "$nic"
+        ) &
     done
+    
+    log "Waiting for all VM creations and launches to start..."
+    wait
 
     echo ""
     log "All VMs launched. VNC endpoints:"
@@ -460,7 +469,24 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     case "${1:-create}" in
         create)   create_all_vms ;;
         stop)     stop_vm "${2:-}" ;;
+        stop-all)
+            for vm_name in "${!VM_DEFS[@]}"; do
+                stop_vm "$vm_name"
+            done
+            ;;
         status)   status_vms ;;
+        restart)
+            shift
+            for vm_name in "$@"; do
+                stop_vm "$vm_name"
+                if [ -n "${VM_DEFS[$vm_name]:-}" ]; then
+                    parse_vm_def "$vm_name"
+                    launch_vm "$vm_name" "$hostname" "$mac" "$ram" "$disk" "$vcpus" "$vnc" "$bridge" "$nic"
+                else
+                    warn "VM $vm_name not found in definitions."
+                fi
+            done
+            ;;
         destroy)
             warn "Destroying all VMs..."
             for vm_name in "${!VM_DEFS[@]}"; do
@@ -469,6 +495,6 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             rm -rf "$VM_DIR"
             log "All VMs destroyed."
             ;;
-        *) echo "Usage: $0 [create|stop <name>|status|destroy]" ;;
+        *) echo "Usage: $0 [create|stop <name>|stop-all|status|restart <name>|destroy]" ;;
     esac
 fi

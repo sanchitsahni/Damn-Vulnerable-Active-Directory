@@ -229,22 +229,22 @@ Trusts:
 | ID | Technique | CVE/Ref | Pre-condition | Vuln Config |
 |----|-----------|---------|---------------|-------------|
 | CRED-001 | Kerberoasting (TGS-REP, hashcat) | N/A | SPN on account | Service accounts with weak passwords |
-| CRED-002 | AS-REP Roasting | N/A | No pre-auth | Account: svc_nospreauth |
+| CRED-002 | AS-REP Roasting | N/A | No pre-auth | Account: svc_thanos |
 | CRED-003 | Password Spray | N/A | Multiple user accounts | Common default password Password123! on 15% of accounts |
 | CRED-004 | Credential Hunting (browser, PuTTY, DBeaver) | N/A | Local admin on workstation | Saved passwords in tools |
 | CRED-005 | LSASS Memory Dump (mimikatz sekurlsa::logonpasswords) | N/A | Local admin + ANTIVIRUS OFF | Debug privilege granted to Administrators |
 | CRED-006 | SAM Database Extraction (reg save HKLM SAM) | N/A | System or backup privilege | SeBackupPrivilege on some accounts |
 | CRED-007 | NTDS.dit Extraction (Volume Shadow Copy) | N/A | Domain admin or backup ops | Backup Operators -> DCSync |
 | CRED-008 | Shadow Credentials (msDS-KeyCredentialLink) | N/A | GenericWrite on user | msDS-KeyCredentialLink writable by delegated group |
-| CRED-009 | Reversible Password Encryption | N/A | Admin on DC | User: backup_user has allowReversiblePasswordEncryption = $true |
+| CRED-009 | Reversible Password Encryption | N/A | Admin on DC | User: heimdall has allowReversiblePasswordEncryption = $true |
 | CRED-010 | Token Impersonation (incognito, sekurlsa::tickets) | N/A | Process in target session | Services running as different users |
 | CRED-011 | Pass-the-Hash (NTLM relay / Mimikatz pth) | N/A | NTLM hash | LM/NTLMv1 enabled on some accounts |
 | CRED-012 | Pass-the-Ticket (Rubeus ptt) | N/A | Valid TGT/TGS | None - standard Kerberos |
 | CRED-013 | DCSync (lsadump::dcsync) | N/A | Replicate Directory Changes | Backup Operators have Replicate Directory Changes |
-| CRED-014 | DCSync w/ Replication-Get-Changes-All | N/A | Same as above, higher tier | Account: sync_user has GetChangesAll |
+| CRED-014 | DCSync w/ Replication-Get-Changes-All | N/A | Same as above, higher tier | Account: doctor.strange has GetChangesAll |
 | CRED-015 | DCShadow (rogue DC push) | N/A | Write to Domain Controllers OU | Schema Admin delegated loosely |
-| CRED-016 | Constrained Delegation Abuse (S4U2Self/S4U2Proxy) | N/A | Service account delegation set | svc_web has TRUSTED_TO_AUTH_FOR_DELEGATION |
-| CRED-017 | Resource-Based Constrained Delegation (RBCD) | N/A | Write to msDS-AllowedToActOnBehalfOfOtherIdentity | ws01$ allows svc_web$ |
+| CRED-016 | Constrained Delegation Abuse (S4U2Self/S4U2Proxy) | N/A | Service account delegation set | svc_vision has TRUSTED_TO_AUTH_FOR_DELEGATION |
+| CRED-017 | Resource-Based Constrained Delegation (RBCD) | N/A | Write to msDS-AllowedToActOnBehalfOfOtherIdentity | ws01$ allows svc_vision$ |
 | CRED-018 | Unconstrained Delegation Abuse | N/A | Service with TRUSTED_FOR_DELEGATION | file01 server unconstrained |
 | CRED-019 | PrintNightmare Credential Dumping | CVE-2021-34527 | Unpatched Print Spooler | Print Spooler enabled, July 2021 patch missing |
 | CRED-020 | PetitPotam NTLM Relay to ADCS | MS-EFSRPC | Domain user, ADCS present | EFSRPC unauthenticated, web enrollment allows NTLM |
@@ -261,7 +261,7 @@ Trusts:
 | CRED-031 | AS-ROASTing (TGT for non-PA user) | N/A | No pre-auth users | User: no_preauth_svc |
 | CRED-032 | Cleartext Protocol Interception (LDAP simple bind) | N/A | Network access | Some apps use LDAP simple bind on port 389 |
 | CRED-033 | LAPS Password Read | N/A | Read to ms-Mcs-AdmPwd attribute | IT_Team has read on LAPS passwords |
-| CRED-034 | gMSA Password Read | N/A | Read to msds-ManagedPassword | Helpdesk has read on gMSA password blob |
+| CRED-034 | gMSA Password Read | N/A | Read to msds-ManagedPassword | SHIELD Agents has read on gMSA password blob |
 | CRED-035 | Credential Manager Saved Creds | N/A | Session hijack or local admin | Windows Credential Manager populated |
 | CRED-036 | Browser Credential Extraction (mimikatz dpapi::) | N/A | Local admin | Chrome/Firefox saved passwords |
 | CRED-037 | AzureAD SSO Token Extraction | N/A | PTA/PHS present | On-prem synced tenant |
@@ -286,7 +286,7 @@ Trusts:
 | CRED-056 | The Walking Dead — Disabled Account Abuse | N/A | GenericAll on disabled user | Re-enable disabled account with retained group memberships |
 | CRED-057 | AD Recycle Bin — Deleted Object Restore | N/A | Write to deleted objects container | Restore deleted privileged object with original group memberships / sIDHistory |
 | CRED-058 | gMSADumper (Read msDS-ManagedPassword) | N/A | PrincipalsAllowedToRetrieveManagedPassword | gMSADumper.py extracts NT hash blob -> PtH |
-| CRED-059 | goLAPS / LAPS v2 Bulk Read | N/A | ReadLAPSPassword extended right | Helpdesk delegated bulk LAPS read across OU |
+| CRED-059 | goLAPS / LAPS v2 Bulk Read | N/A | ReadLAPSPassword extended right | SHIELD Agents delegated bulk LAPS read across OU |
 | CRED-060 | SCCMDecryptor-BOF (DPAPI on SCCM client) | N/A | Local admin on SCCM-managed host | Decrypts SCCM NAA / policy secrets in CIM/WMI repository |
 | CRED-061 | Kerberos Relay via CNAME (krbrelayx) | N/A | DNS write or ADIDNS | Register CNAME -> victim auth -> relay Kerberos to LDAP |
 | CRED-062 | Reflective Kerberos Relay | N/A | Same-host relay possible | krbrelayx reflects Kerberos auth back to issuer service |
@@ -314,12 +314,13 @@ Trusts:
 | LAT-014 | Realm Trust MIT Kerberos Relay | N/A | Realm trust, MIT present | RC4 enabled on realm trust |
 | LAT-015 | IPv6 DHCPv6 MitM + WPAD Relay | N/A | IPv6 enabled, no RA guard | IPv6 enabled by default, no DHCPv6 guard |
 | LAT-016 | Resource-Based Constrained Delegation Chain | N/A | Chain of delegation hops | Multiple servers with RBCD configured |
-| LAT-017 | ACL Abuse: ForceChangePassword | N/A | GenericWrite on user | Helpdesk has GenericWrite on Domain Users |
-| LAT-018 | ACL Abuse: Add Members on Group | N/A | GenericWrite on group | IT_Admins writable by Helpdesk |
+| LAT-017 | ACL Abuse: ForceChangePassword | N/A | ForceChangePassword on user | developer1 has ForceChangePassword on nick.fury |
+| LAT-018 | ACL Abuse: Add Members on Group | N/A | GenericWrite on group | Avengers Admins writable by SHIELD Agents (qa_user has AddSelf) |
 | LAT-019 | ACL Abuse: Add KeyCredentialLink | N/A | GenericWrite on target | msDS-KeyCredentialLink writable |
-| LAT-020 | ACL Abuse: Owner Change | N/A | WriteOwner on target | Helpdesk has WriteOwner on Domain Admins |
-| LAT-021 | ACL Abuse: DCSync via GenericAll on domain | N/A | GenericAll/WriteDACL on domain object | Sync_Account delegated GenericAll on domain |
-| LAT-022 | ACL Abuse: WriteSPN -> Kerberoast | N/A | Validated-SPN write | svc_generic has validated-SPN write on other accounts |
+| LAT-020 | ACL Abuse: Owner Change | N/A | WriteOwner on target | nick.fury has WriteOwner on Domain Admins |
+| LAT-021 | ACL Abuse: DCSync via GenericAll on domain | N/A | GenericAll/WriteDACL on domain object | doctor.strange delegated GenericAll on domain |
+| LAT-021b | ACL Abuse: GenericAll on User | N/A | GenericAll | peter.parker has GenericAll on tony.stark |
+| LAT-022 | ACL Abuse: WriteSPN -> Kerberoast | N/A | Validated-SPN write | nick.fury has Validated-SPN write on svc_vision |
 | LAT-023 | Cross-Forest TGT Delegation Abuse | N/A | Trust with TGT delegation | External trust allows TGT delegation |
 | LAT-024 | LDAP Signing Not Required -> Relay to Any DC | N/A | LDAP signing missing | ldap_server_integrity not enforced |
 | LAT-025 | WebDAV Redirector Coercion (Coerce Authentication) | N/A | srvsvc / webdav redirector | srvsvc pipe triggers auth to attacker |
@@ -417,7 +418,7 @@ Trusts:
 | PER-012 | AppInit_DLLs | N/A | Admin | AppInit_DLLs enabled, DLL loaded into every process |
 | PER-013 | Accessibility Tools Backdoor | N/A | Admin/System | All accessibility tools replaced |
 | PER-014 | RID Hijacking (SAM modification) | N/A | SYSTEM / Offline | User hacker has RID 500 |
-| PER-015 | AdminSDHolder Abuse | N/A | Modify AdminSDHolder | AdminSDHolder ACL grants full control to new group |
+| PER-015 | AdminSDHolder Abuse | N/A | Modify AdminSDHolder | steve.rogers has GenericAll on AdminSDHolder; SDProp grants full control |
 | PER-016 | SID History Injection | N/A | Domain Admin / Schema Admin | Add Enterprise Admin SID to account |
 | PER-017 | DCShadow (persistent rogue DC) | N/A | Write to Configuration NC | Re-register rogue DC periodically |
 | PER-018 | Golden Ticket Persistence | N/A | KRBTGT hash | Skip verification with known hash |

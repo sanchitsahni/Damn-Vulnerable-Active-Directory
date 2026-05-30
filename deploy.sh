@@ -75,6 +75,11 @@ install_dependencies() {
                 qemu-system-x86 qemu-utils qemu-kvm \
                 libvirt-daemon-system libvirt-clients bridge-utils \
                 ansible python3 python3-pip genisoimage wget curl jq unzip aria2 openssh-client git
+            
+            # Fix qemu-bridge-helper permissions for Debian/Ubuntu/Kali
+            if [ -f /usr/lib/qemu/qemu-bridge-helper ]; then
+                sudo chmod u+s /usr/lib/qemu/qemu-bridge-helper
+            fi
             ;;
         dnf)
             sudo dnf install -y \
@@ -132,36 +137,6 @@ setup_networks() {
     source "${DVAD_HOME}/qemu/network/setup-network.sh"
     create_all_networks
     log "Virtual networks configured."
-}
-
-# ==============================================================================
-# Phase 2: Windows Media Download
-# ==============================================================================
-download_windows_media() {
-    log "Checking Windows installation media..."
-    source "${DVAD_HOME}/scripts/download-windows.sh"
-    ensure_media
-    log "Windows media ready."
-}
-
-# ==============================================================================
-# Phase 2.5: Convert VHD to QCOW2 Master Template
-# ==============================================================================
-convert_master_template() {
-    local vhd_file="${CFG_MEDIA_PATH}/windows-server-2022-eval.vhd"
-    local base_qcow2="${CFG_MEDIA_PATH}/win2k25.qcow2"
-
-    if [ ! -f "$base_qcow2" ]; then
-        log "Converting VHD to QCOW2 master template (this takes a few minutes)..."
-        if [ ! -f "$vhd_file" ]; then
-            err "VHD file not found: $vhd_file. Cannot convert to QCOW2."
-            exit 1
-        fi
-        qemu-img convert -O qcow2 "$vhd_file" "$base_qcow2"
-        log "Master QCOW2 template created successfully."
-    else
-        info "Master QCOW2 template already exists: $base_qcow2"
-    fi
 }
 
 # ==============================================================================
@@ -245,6 +220,7 @@ main() {
                 cat <<EOF
 Usage: ./deploy.sh [--minimal|--single-dc] [--vps] [--memory GB] [--cpus N]
                    [--disk-path PATH] [--vnc-bind ADDR]
+                   [destroy|suspend|restart <vm_id>...]
 
   --minimal       Deploy only corp.local domain (5 VMs, ~12GB RAM)
   --single-dc     Deploy single DC for quick testing (1 VM, ~3GB RAM)
@@ -258,7 +234,29 @@ Usage: ./deploy.sh [--minimal|--single-dc] [--vps] [--memory GB] [--cpus N]
   --disk-path P   Override VM disk storage directory (default: ./vms).
   --vnc-bind ADDR Bind VNC sockets to ADDR (default: 127.0.0.1; "0.0.0.0" exposes
                   VNC on all interfaces - only safe behind a firewall/VPN).
+  destroy         Destroy and clean all VMs and networks.
+  suspend         Stop all running VMs.
+  restart <ids>   Restart specific VMs (e.g., ./deploy.sh restart dc01-corp file01).
 EOF
+                exit 0;;
+            destroy)
+                log "Destroying lab environment..."
+                bash "${DVAD_HOME}/qemu/vm-create.sh" destroy
+                bash "${DVAD_HOME}/qemu/network/setup-network.sh" destroy
+                exit 0;;
+            suspend)
+                log "Suspending (stopping) all VMs..."
+                bash "${DVAD_HOME}/qemu/vm-create.sh" stop-all
+                log "All VMs suspended."
+                exit 0;;
+            restart)
+                shift
+                if [ $# -eq 0 ]; then
+                    err "restart requires at least one VM id/name (e.g., ./deploy.sh restart dc01-corp)"
+                    exit 1
+                fi
+                log "Restarting VMs: $*"
+                bash "${DVAD_HOME}/qemu/vm-create.sh" restart "$@"
                 exit 0;;
             *) err "Unknown option: $1"; exit 1;;
         esac
@@ -294,8 +292,6 @@ EOF
     install_dependencies
     check_kvm
     setup_networks
-    download_windows_media
-    convert_master_template
     create_vms
     wait_for_vms
     run_ansible
@@ -306,7 +302,7 @@ EOF
     echo -e "${GREEN}${BOLD}   DVAD Lab Deployment Complete!                           ${NC}"
     echo -e "${GREEN}${BOLD}============================================================${NC}"
     echo ""
-    echo "  Connect to attacker workstation:"
+    echo "  Connect to victim workstation:"
     echo "    ssh ws01.corp.local  OR  VNC ${CFG_VNC_BIND}:5906"
     if [ "$CFG_VNC_BIND" = "127.0.0.1" ]; then
         echo "    (VNC is loopback-only — tunnel from your laptop with:"

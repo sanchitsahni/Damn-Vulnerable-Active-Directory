@@ -35,7 +35,7 @@ flag_manifest:
   - { id: REC-015, cat: Recon,      desc: "Credentials in SYSVOL Scripts",           host: dc01.corp.local,  acl: domain_users }
 
   # ----- Credential Access (CRED-001..CRED-065) -----
-  - { id: CRED-001, cat: Credential, desc: "Kerberoasted svc_web",                   host: dc01.corp.local,  acl: system_only }
+  - { id: CRED-001, cat: Credential, desc: "Kerberoasted svc_vision",                   host: dc01.corp.local,  acl: system_only }
   - { id: CRED-002, cat: Credential, desc: "AS-REP Roasted svc_nopreauth",           host: dc01.corp.local,  acl: system_only }
   - { id: CRED-003, cat: Credential, desc: "Password Spray Success",                 host: dc01.corp.local,  acl: system_only }
   - { id: CRED-004, cat: Credential, desc: "Credential Hunting (SYSVOL/Files)",      host: file01.corp.local, acl: system_only }
@@ -233,7 +233,7 @@ flag_manifest:
   - { id: PER-030, cat: Persistence, desc: "ADIDNS Time Bomb (new-fileserver)",      host: dc01.corp.local, acl: system_only }
   - { id: PER-031, cat: Persistence, desc: "GPO Backdoor (logon script)",            host: dc01.corp.local, acl: system_only }
   - { id: PER-032, cat: Persistence, desc: "Hidden Account (Deny ListChildren)",     host: dc01.corp.local, acl: system_only }
-  - { id: PER-033, cat: Persistence, desc: "AdminSDHolder GenericAll user2",         host: dc01.corp.local, acl: system_only }
+  - { id: PER-033, cat: Persistence, desc: "AdminSDHolder GenericAll tony.stark",         host: dc01.corp.local, acl: system_only }
   - { id: PER-034, cat: Persistence, desc: "GPO ScheduledTasks.xml DDP",             host: dc01.corp.local, acl: system_only }
   - { id: PER-035, cat: Persistence, desc: "Domain Persistence via Cert (PERSIST1)", host: ca01.corp.local, acl: system_only }
   - { id: PER-036, cat: Persistence, desc: "Logon Trigger WMI Persistence",          host: dc01.corp.local, acl: system_only }
@@ -269,7 +269,7 @@ flag_manifest:
   - { id: DF-027, cat: DomainForest, desc: "SAMAccountName Trust Abuse",             host: dc01.corp.local, acl: system_only }
   - { id: DF-028, cat: DomainForest, desc: "RODC Abuse (PRP)",                       host: dc01.corp.local, acl: system_only }
   - { id: DF-029, cat: DomainForest, desc: "GPO Delegation (developer1 DDP)",        host: dc01.corp.local, acl: system_only }
-  - { id: DF-030, cat: DomainForest, desc: "Schema Admin Hijack (helpdesk)",         host: dc01.corp.local, acl: system_only }
+  - { id: DF-030, cat: DomainForest, desc: "Schema Admin Hijack (nick.fury)",         host: dc01.corp.local, acl: system_only }
   - { id: DF-031, cat: DomainForest, desc: "ADCS ESC13 OID->Group Link",             host: ca01.corp.local, acl: system_only }
   - { id: DF-032, cat: DomainForest, desc: "ADCS ESC14 Explicit Cert Mapping",       host: dc01.corp.local, acl: system_only }
   - { id: DF-033, cat: DomainForest, desc: "ADCS ESC15 EKUwu (CVE-2024-49019)",      host: ca01.corp.local, acl: system_only }

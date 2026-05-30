@@ -881,7 +881,7 @@ Accept: text/html
 Authorization: NTLM TlRMTVNTUAABAAAA...
 ```
 
-The Authorization header is where Windows speaks NTLM or Negotiate. NTLM authentication over HTTP is a three-message exchange tunnelled in the Authorization header. When you read `ntlmrelayx` output that says "Got authentication for alice", that's a base64 NTLM message it has parsed out of the Authorization header.
+The Authorization header is where Windows speaks NTLM or Negotiate. NTLM authentication over HTTP is a three-message exchange tunnelled in the Authorization header. When you read `ntlmrelayx` output that says "Got authentication for peter.parker", that's a base64 NTLM message it has parsed out of the Authorization header.
 
 ### NTLM-over-HTTP three-message flow
 
@@ -1303,7 +1303,7 @@ All should report ~128 (Windows default with 0 hops). If any reports 64, that ho
 
 ### Exercise 1.G — Trace a Kerberos negotiation
 
-(Requires creds, foreshadows chapter 5.) Authenticate to dc01 using `kinit alice@CORP.LOCAL` after `KRB5_CONFIG=~/krb5.conf`. Capture the AS-REQ/AS-REP on the wire. Open in Wireshark, expand the Kerberos tree. Identify the encryption type, the salt, the principal name, and the realm. You'll come back to this in chapter 5.
+(Requires creds, foreshadows chapter 5.) Authenticate to dc01 using `kinit peter.parker@CORP.LOCAL` after `KRB5_CONFIG=~/krb5.conf`. Capture the AS-REQ/AS-REP on the wire. Open in Wireshark, expand the Kerberos tree. Identify the encryption type, the salt, the principal name, and the realm. You'll come back to this in chapter 5.
 
 ---
 

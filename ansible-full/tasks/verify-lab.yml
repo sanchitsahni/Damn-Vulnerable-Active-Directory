@@ -16,7 +16,7 @@
   win_shell: |
     Import-Module ActiveDirectory
     $users = Get-ADUser -Filter * | Select-Object -ExpandProperty SamAccountName
-    $required = @("attacker","user1","user2","svc_web","svc_sql","svc_nospreauth","backup_user","helpdesk","sync_user")
+    $required = @("loki","peter.parker","tony.stark","svc_vision","svc_jarvis","svc_thanos","heimdall","nick.fury","doctor.strange")
     $missing = @()
     foreach ($u in $required) {
       if ($users -notcontains $u) { $missing += $u }

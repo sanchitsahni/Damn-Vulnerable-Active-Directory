@@ -29,26 +29,26 @@ weak_passwords:
 
 # Users and groups
 users_domain:
-  - { name: "attacker", password: "P@ssw0rd!CTF", groups: ["Domain Users"] }
-  - { name: "user1", password: "Password123!", groups: ["Domain Users"] }
-  - { name: "user2", password: "Welcome1", groups: ["Domain Users"] }
-  - { name: "user3", password: "Summer2025!", groups: ["Domain Users"] }
-  - { name: "user4", password: "Password123!", groups: ["Domain Users"] }
-  - { name: "svc_web", password: "WebSvc2025!", spn: "HTTP/web.corp.local", groups: ["Domain Users"] }
-  - { name: "svc_sql", password: "SqlSvc2025!", spn: "MSSQLSvc/sql01.corp.local:1433", groups: ["Domain Users"] }
-  - { name: "svc_nospreauth", password: "NoPreAuth1!", groups: ["Domain Users"], no_preauth: true }
-  - { name: "backup_user", password: "Backup1!", reversible: true, groups: ["Backup Operators"] }
-  - { name: "helpdesk", password: "HelpDesk1!", groups: ["Help Desk", "Account Operators"] }
-  - { name: "sync_user", password: "Sync1!", groups: ["Domain Users"], dcsync: true }
-  - { name: "rodc_admin", password: "Rodc1!", groups: ["Domain Users"] }
-  - { name: "gmsa_svc", is_gmsa: true, groups: ["Domain Users"] }
+  - { name: "loki", password: "P@ssw0rd!CTF", groups: ["Domain Users"] }
+  - { name: "peter.parker", password: "Password123!", groups: ["Domain Users"] }
+  - { name: "tony.stark", password: "Welcome1", groups: ["Domain Users"] }
+  - { name: "steve.rogers", password: "Summer2025!", groups: ["Domain Users"] }
+  - { name: "bruce.banner", password: "Password123!", groups: ["Domain Users"] }
+  - { name: "svc_vision", password: "WebSvc2025!", spn: "HTTP/web.corp.local", groups: ["Domain Users"] }
+  - { name: "svc_jarvis", password: "SqlSvc2025!", spn: "MSSQLSvc/sql01.corp.local:1433", groups: ["Domain Users"] }
+  - { name: "svc_thanos", password: "NoPreAuth1!", groups: ["Domain Users"], no_preauth: true }
+  - { name: "heimdall", password: "Backup1!", reversible: true, groups: ["Backup Operators"] }
+  - { name: "nick.fury", password: "HelpDesk1!", groups: ["SHIELD Agents", "Account Operators"] }
+  - { name: "doctor.strange", password: "Sync1!", groups: ["Domain Users"], dcsync: true }
+  - { name: "wong", password: "Rodc1!", groups: ["Domain Users"] }
+  - { name: "gmsa_ultron", is_gmsa: true, groups: ["Domain Users"] }
 
 groups_domain:
-  - "Help Desk"
-  - "IT Admins"
+  - "SHIELD Agents"
+  - "Avengers Admins"
   - "Backup Operators"
-  - "SQL Admins"
-  - "Developers"
+  - "Stark Tech DBAs"
+  - "Pym Tech Devs"
 
 # ADCS Templates to create (vulnerable configurations)
 adcs_templates:

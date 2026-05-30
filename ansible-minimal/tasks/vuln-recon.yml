@@ -89,7 +89,7 @@
     content: |
       @echo off
       REM Legacy mapping script - leftover from 2014
-      net use Z: \\file01.corp.local\Backups /user:CORP\backup_user "BackupP@ssw0rd!2014" /persistent:yes
+      net use Z: \\file01.corp.local\Backups /user:CORP\heimdall "BackupP@ssw0rd!2014" /persistent:yes
   ignore_errors: yes
 
 # REC-009, REC-012, REC-013: documented cross-references

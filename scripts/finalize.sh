@@ -80,9 +80,9 @@ run_verification() {
     done
     echo ""
     echo "  Primary Domain Controller:  dc01.corp.local (10.10.0.10)"
-    echo "  Attacker Workstation:       ws01.corp.local (10.10.0.100)"
+    echo "  Victim Workstation:         ws01.corp.local (10.10.0.100)"
     echo ""
-    echo "  SSH to ws01:  ssh attacker@10.10.0.100"
+    echo "  SSH to ws01:  ssh loki@10.10.0.100"
     echo ""
     echo "========================================"
     echo ""
@@ -96,8 +96,8 @@ run_verification() {
 ================================================================================
 
 Getting Started:
-  1. Connect to attacker workstation via VNC on port 5906
-  2. Login: corp\attacker / DVADlab2024!
+  1. Connect to victim workstation via VNC on port 5906
+  2. Login: corp\loki / DVADlab2024!
   3. Open PowerShell, navigate to C:\DVAD\tools
   4. Read the handout: C:\DVAD\handout\CTF-Handout.txt
 

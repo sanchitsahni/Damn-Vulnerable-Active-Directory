@@ -39,9 +39,9 @@ Flag file: `C:\Flags\admin-flag.txt` (SYSTEM-only).
 
 ```bash
 F=10.10.0.13
-nxc smb $F -u alice -p 'DVADlab2024!' --shares --sessions --loggedon-users
-smbmap -H $F -u alice -p 'DVADlab2024!' -R PublicShare
-ssh alice@$F                                                     # try kerb / weak local
+nxc smb $F -u peter.parker -p 'DVADlab2024!' --shares --sessions --loggedon-users
+smbmap -H $F -u peter.parker -p 'DVADlab2024!' -R PublicShare
+ssh peter.parker@$F                                                     # try kerb / weak local
 # After foothold:
 winPEASx64.exe quiet cmd
 sc qc VulnService

@@ -111,8 +111,8 @@
     New-ADOrganizationalUnit -Name "Computers" -Path "DC=finance,DC=local" -ProtectedFromAccidentalDeletion $false -ErrorAction SilentlyContinue
     New-ADGroup -Name "Finance Admins" -SamAccountName "Finance Admins" -GroupCategory Security -GroupScope Global -Path "OU=Finance,DC=finance,DC=local" -ErrorAction SilentlyContinue
     $users = @(
-      @{Name="fin_user1"; Password="Fin1234!"; Groups=@("Domain Users")},
-      @{Name="fin_user2"; Password="Fin1234!"; Groups=@("Domain Users")},
+      @{Name="scott.lang"; Password="Fin1234!"; Groups=@("Domain Users")},
+      @{Name="hope.vandyne"; Password="Fin1234!"; Groups=@("Domain Users")},
       @{Name="fin_svc"; Password="FinSvc2025!"; Groups=@("Domain Users", "Finance Admins"); SPN="HTTP/finance.local"}
     )
     foreach ($u in $users) {

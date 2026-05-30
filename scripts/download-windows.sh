@@ -68,57 +68,13 @@ download_virtio() {
     fi
 }
 
-download_windows_iso() {
-    mkdir -p "$MEDIA_DIR"
 
-    # Check if VHD already exists
-    if [ -f "$VHD_FILE" ]; then
-        info "Windows Server VHD already exists: $VHD_FILE"
-        # Quick size check
-        local size=$(stat -c%s "$VHD_FILE" 2>/dev/null || stat -f%z "$VHD_FILE" 2>/dev/null || echo 0)
-        if [ "$size" -gt 4000000000 ]; then
-            info "VHD appears valid ($(numfmt --to=iec $size 2>/dev/null || echo "${size} bytes"))."
-            return 0
-        else
-            warn "VHD seems too small ($size bytes). Re-downloading..."
-            rm -f "$VHD_FILE"
-        fi
-    fi
-
-    WINDOWS_VHD_URL="https://go.microsoft.com/fwlink/p/?linkid=2195166&clcid=0x409&culture=en-us&country=us"
-
-    info "=========================================="
-    info "Downloading Windows Server 2022 Evaluation VHD"
-    info "From: Microsoft Evaluation Center"
-    info "Size: ~5.8 GB"
-    info "This may take a while depending on your connection..."
-    info "=========================================="
-
-    if command -v aria2c &>/dev/null; then
-        download_with_aria2 "$WINDOWS_VHD_URL" "$VHD_FILE"
-    elif command -v wget &>/dev/null; then
-        download_with_wget "$WINDOWS_VHD_URL" "$VHD_FILE"
-    else
-        download_with_curl "$WINDOWS_VHD_URL" "$VHD_FILE"
-    fi
-
-    # Verify download
-    local final_size=$(stat -c%s "$VHD_FILE" 2>/dev/null || echo 0)
-    if [ "$final_size" -lt 4000000000 ]; then
-        warn "Download appears incomplete (${final_size} bytes)."
-        warn "You may need to manually download the VHD and place it at: $VHD_FILE"
-        return 1
-    fi
-
-    log "Windows Server 2022 VHD downloaded successfully."
-}
 
 ensure_media() {
     info "Checking installation media..."
     mkdir -p "$MEDIA_DIR"
 
     download_virtio
-    download_windows_iso
 
     log "All installation media ready."
     ls -lh "$MEDIA_DIR/"*.iso 2>/dev/null || true

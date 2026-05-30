@@ -1,6 +1,20 @@
 # 06 — Persistence (PER-001..037)
 
-Persistence = "stay after credentials change, after reboot, after the IR team thinks they've cleaned up." DVAD has every common Windows + AD persistence primitive wired up — the lab is for *practicing detection* as much as offense.
+Persistence = "stay after credentials change, after reboot, after the IR team thinking they've cleaned up." DVAD has every common Windows + AD persistence primitive wired up — the lab is for *practicing detection* as much as offense.
+
+---
+
+### Persistence Vectors Mapping
+
+```mermaid
+graph LR
+    classDef user fill:#1d2b38,stroke:#00d2ff,stroke-width:2px,color:#fff;
+    classDef group fill:#3a1d38,stroke:#ff00d2,stroke-width:2px,color:#fff;
+    classDef object fill:#333333,stroke:#aaaaaa,stroke-width:2px,color:#fff;
+
+    Steve[steve.rogers]:::user -->|GenericAll| AdminSD[AdminSDHolder]:::object
+    AdminSD -.->|SDProp / FullControl| DA[Domain Admins]:::group
+```
 
 ---
 
@@ -128,12 +142,12 @@ See CRED-043.
 
 ### PER-015 — AdminSDHolder ACL injection
 **What it is:** add ACE to `CN=AdminSDHolder,CN=System,DC=corp,DC=local`. SDProp re-applies the AdminSDHolder ACL every 60 minutes to every protected object (Domain Admins, Enterprise Admins, etc.). Self-healing backdoor — even if removed, returns within the hour.
-**Why it works here:** GenericAll injected for `user2` in DVAD.
-**Tools:** PowerView `Add-DomainObjectAcl -TargetIdentity AdminSDHolder -PrincipalIdentity attacker -Rights All`.
+**Why it works here:** GenericAll injected for `steve.rogers` in DVAD.
+**Tools:** PowerView `Add-DomainObjectAcl -TargetIdentity AdminSDHolder -PrincipalIdentity steve.rogers -Rights All`.
 **Steps:**
 ```powershell
 Add-DomainObjectAcl -TargetIdentity 'CN=AdminSDHolder,CN=System,DC=corp,DC=local' \
-   -PrincipalIdentity attacker -Rights All
+   -PrincipalIdentity steve.rogers -Rights All
 ```
 **Detection:** Event `5136` on AdminSDHolder; MDI native alert.
 **Prevention:** alert on any change to AdminSDHolder; tier-0 isolation; PIM.
@@ -145,7 +159,7 @@ Add-DomainObjectAcl -TargetIdentity 'CN=AdminSDHolder,CN=System,DC=corp,DC=local
 **Tools:** mimikatz `sid::patch` + `sid::add`, DCShadow.
 **Steps:**
 ```powershell
-.\mimikatz.exe "sid::patch" "sid::add /sam:attacker /new:S-1-5-21-CORP-519"
+.\mimikatz.exe "sid::patch" "sid::add /sam:loki /new:S-1-5-21-CORP-519"
 ```
 **Detection:** MDI "SID-History suspicious activity."
 **Prevention:** Quarantine attribute; PowerShell `Get-ADUser -Filter * -Properties sIDHistory | ?{$_.sIDHistory}` audit; SIDHistory should be empty in modern domains.
@@ -253,7 +267,7 @@ See PER-009 / CRED-038.
 **Tools:** `pyWhisker`, `Certipy shadow`.
 **Steps:**
 ```bash
-certipy shadow auto -u alice -p 'DVADlab2024!' -account alice
+certipy shadow auto -u peter.parker -p 'DVADlab2024!' -account peter.parker
 ```
 **Detection:** Event `5136` on `msDS-KeyCredentialLink` (self).
 **Prevention:** restrict self-write on `msDS-KeyCredentialLink`; KB5014754 strict mapping.

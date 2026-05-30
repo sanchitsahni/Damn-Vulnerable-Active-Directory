@@ -17,9 +17,9 @@
   ansible.windows.win_shell: |
     Import-Module ActiveDirectory
     $accounts = @{
-      "svc_web"        = "Summer2024"
-      "svc_sql"        = "Password1!"
-      "svc_nospreauth" = "Winter2025"
+      "svc_vision"        = "Summer2024"
+      "svc_jarvis"        = "Password1!"
+      "svc_thanos" = "Winter2025"
     }
     foreach ($n in $accounts.Keys) {
       $sec = ConvertTo-SecureString $accounts[$n] -AsPlainText -Force
@@ -60,14 +60,14 @@
   ignore_errors: yes
 
 # ------------------------------------------------------------------------------
-# CRED-007 / CRED-013 / CRED-014: DCSync via Backup Operators + sync_user
+# CRED-007 / CRED-013 / CRED-014: DCSync via Backup Operators + doctor.strange
 # Replace the broken DCSync grant from ad_domain/tasks/main.yml with the
 # correct extended-right GUIDs.
 # ------------------------------------------------------------------------------
-- name: CRED-013 - Grant Replicate-Directory-Changes / All to sync_user
+- name: CRED-013 - Grant Replicate-Directory-Changes / All to doctor.strange
   ansible.windows.win_shell: |
     Import-Module ActiveDirectory
-    $user = Get-ADUser -Identity "sync_user"
+    $user = Get-ADUser -Identity "doctor.strange"
     $sid = New-Object System.Security.Principal.SecurityIdentifier ($user.SID)
     $domain = (Get-ADDomain).DistinguishedName
     $acl = Get-ACL "AD:\$domain"
@@ -82,22 +82,22 @@
     Set-ACL "AD:\$domain" $acl
   ignore_errors: yes
 
-- name: CRED-007 - Ensure Backup Operators is populated (backup_user already in role)
+- name: CRED-007 - Ensure Backup Operators is populated (heimdall already in role)
   ansible.windows.win_shell: |
     Import-Module ActiveDirectory
-    try { Add-ADGroupMember -Identity "Backup Operators" -Members "backup_user" -ErrorAction Stop } catch { Write-Host "membership exists" }
+    try { Add-ADGroupMember -Identity "Backup Operators" -Members "heimdall" -ErrorAction Stop } catch { Write-Host "membership exists" }
   ignore_errors: yes
 
 # ------------------------------------------------------------------------------
 # CRED-008 / PER-027: Shadow Credentials precondition — GenericWrite via
-# msDS-KeyCredentialLink. helpdesk -> developer1 ACL already set in vuln_setup;
+# msDS-KeyCredentialLink. nick.fury -> developer1 ACL already set in vuln_setup;
 # add the parallel chain attacker -> ws01$ for KrbRelayUp/Self-shadow paths.
 # ------------------------------------------------------------------------------
-- name: CRED-008 - Grant helpdesk GenericWrite over user2 for shadow creds chain
+- name: CRED-008 - Grant nick.fury GenericWrite over tony.stark for shadow creds chain
   ansible.windows.win_shell: |
     Import-Module ActiveDirectory
-    $src = Get-ADUser -Identity "helpdesk"
-    $tgt = Get-ADUser -Identity "user2"
+    $src = Get-ADUser -Identity "nick.fury"
+    $tgt = Get-ADUser -Identity "tony.stark"
     $sid = New-Object System.Security.Principal.SecurityIdentifier ($src.SID)
     $acl = Get-ACL "AD:\$tgt"
     $rule = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sid, "WriteProperty", "Allow", [guid]"5b47d60f-6150-4db2-a45b-7f9779355d6c")
@@ -107,14 +107,14 @@
 
 # ------------------------------------------------------------------------------
 # CRED-009: Reversible password encryption already set in ad_domain
-# (backup_user). Refresh + force password change to populate the cleartext blob.
+# (heimdall). Refresh + force password change to populate the cleartext blob.
 # ------------------------------------------------------------------------------
-- name: CRED-009 - Force reversible-encryption population on backup_user
+- name: CRED-009 - Force reversible-encryption population on heimdall
   ansible.windows.win_shell: |
     Import-Module ActiveDirectory
-    Set-ADUser -Identity "backup_user" -AllowReversiblePasswordEncryption $true
+    Set-ADUser -Identity "heimdall" -AllowReversiblePasswordEncryption $true
     $sec = ConvertTo-SecureString "ReverseMe2025!" -AsPlainText -Force
-    Set-ADAccountPassword -Identity "backup_user" -NewPassword $sec -Reset
+    Set-ADAccountPassword -Identity "heimdall" -NewPassword $sec -Reset
   ignore_errors: yes
 
 # ------------------------------------------------------------------------------
@@ -134,7 +134,7 @@
 - name: CRED-015 - Grant attacker write to Configuration container (DCShadow surface)
   ansible.windows.win_shell: |
     Import-Module ActiveDirectory
-    $src = Get-ADUser -Identity "attacker"
+    $src = Get-ADUser -Identity "loki"
     $sid = New-Object System.Security.Principal.SecurityIdentifier ($src.SID)
     $rootDSE = [ADSI]"LDAP://RootDSE"
     $configNC = $rootDSE.configurationNamingContext.Value
@@ -146,7 +146,7 @@
 
 # ------------------------------------------------------------------------------
 # CRED-016 / CRED-017 / CRED-018: Delegation matrix
-# vuln-kerberos.yml already does this for svc_web/file01/ws01. Add ESC-friendly
+# vuln-kerberos.yml already does this for svc_vision/file01/ws01. Add ESC-friendly
 # RBCD chains: any low-priv domain user -> attacker-controlled fake comp.
 # ------------------------------------------------------------------------------
 - name: CRED-017 - Pre-create attacker-owned computer object (for RBCD/S4U chains)
@@ -156,8 +156,8 @@
     if (-not (Get-ADComputer -Filter "Name -eq '$name'" -ErrorAction SilentlyContinue)) {
       New-ADComputer -Name $name -SAMAccountName "$name$" -Path "CN=Computers,DC=corp,DC=local"
     }
-    # Grant 'attacker' GenericAll over the fake host so they can craft RBCD
-    $src = Get-ADUser -Identity "attacker"
+    # Grant 'loki' GenericAll over the fake host so they can craft RBCD
+    $src = Get-ADUser -Identity "loki"
     $tgt = Get-ADComputer -Identity $name
     $sid = New-Object System.Security.Principal.SecurityIdentifier ($src.SID)
     $acl = Get-ACL "AD:\$tgt"
@@ -250,12 +250,12 @@
 # ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------
-# CRED-033 / CRED-059: LAPS read delegation to Help Desk over OU=Computers
+# CRED-033 / CRED-059: LAPS read delegation to SHIELD Agents over OU=Computers
 # ------------------------------------------------------------------------------
-- name: CRED-033 - Delegate LAPS password read to Help Desk over Computers OU
+- name: CRED-033 - Delegate LAPS password read to SHIELD Agents over Computers OU
   ansible.windows.win_shell: |
     Import-Module ActiveDirectory
-    $group = Get-ADGroup -Identity "Help Desk"
+    $group = Get-ADGroup -Identity "SHIELD Agents"
     $sid = New-Object System.Security.Principal.SecurityIdentifier ($group.SID)
     $ou = "OU=Computers,DC=corp,DC=local"
     try {
@@ -276,9 +276,9 @@
   ignore_errors: yes
 
 # ------------------------------------------------------------------------------
-# CRED-034 / CRED-058: gMSA with delegated read to Help Desk
+# CRED-034 / CRED-058: gMSA with delegated read to SHIELD Agents
 # ------------------------------------------------------------------------------
-- name: CRED-034 - Create gMSA and delegate read to Help Desk
+- name: CRED-034 - Create gMSA and delegate read to SHIELD Agents
   ansible.windows.win_shell: |
     Import-Module ActiveDirectory
     # KDS root key required for gMSAs
@@ -288,7 +288,7 @@
     $name = "gmsa_web"
     try {
       New-ADServiceAccount -Name $name -DNSHostName "web.corp.local" `
-        -PrincipalsAllowedToRetrieveManagedPassword "Help Desk" -ErrorAction Stop
+        -PrincipalsAllowedToRetrieveManagedPassword "SHIELD Agents" -ErrorAction Stop
     } catch { Write-Host "gMSA $name already exists or failed: $($_.Exception.Message)" }
   ignore_errors: yes
 
@@ -403,7 +403,7 @@
       Add-ADGroupMember -Identity "Domain Admins" -Members $name -ErrorAction SilentlyContinue
     } catch { Write-Host "former_admin may exist" }
     # GenericAll for attacker -> can re-enable
-    $src = Get-ADUser -Identity "attacker"
+    $src = Get-ADUser -Identity "loki"
     $tgt = Get-ADUser -Identity $name
     $sid = New-Object System.Security.Principal.SecurityIdentifier ($src.SID)
     $acl = Get-ACL "AD:\$tgt"
@@ -448,16 +448,16 @@
   debug: { msg: "CRED-063 PAC forgery requires legacy DC; documented attack path only." }
 
 # ------------------------------------------------------------------------------
-# CRED-065: DPAPI backup key reachable — ensure backup_user can read it
+# CRED-065: DPAPI backup key reachable — ensure heimdall can read it
 # ------------------------------------------------------------------------------
-- name: CRED-065 - Grant backup_user read on DPAPI backup key container
+- name: CRED-065 - Grant heimdall read on DPAPI backup key container
   ansible.windows.win_shell: |
     Import-Module ActiveDirectory
     $secretsDN = "CN=BCKUPKEY_P Secret,CN=System,DC=corp,DC=local"
     try {
       $secret = Get-ADObject -Identity $secretsDN -ErrorAction SilentlyContinue
       if ($secret) {
-        $src = Get-ADUser -Identity "backup_user"
+        $src = Get-ADUser -Identity "heimdall"
         $sid = New-Object System.Security.Principal.SecurityIdentifier ($src.SID)
         $acl = Get-ACL "AD:\$secretsDN"
         $rule = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($sid, "GenericRead", "Allow")

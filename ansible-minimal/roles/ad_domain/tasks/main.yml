@@ -143,26 +143,26 @@
     New-ADOrganizationalUnit -Name "Servers" -Path "DC=corp,DC=local" -ProtectedFromAccidentalDeletion $false -ErrorAction SilentlyContinue
     New-ADOrganizationalUnit -Name "GPO_Testing" -Path "DC=corp,DC=local" -ProtectedFromAccidentalDeletion $false -ErrorAction SilentlyContinue
     New-ADOrganizationalUnit -Name "Restricted" -Path "DC=corp,DC=local" -ProtectedFromAccidentalDeletion $false -ErrorAction SilentlyContinue
-    New-ADGroup -Name "Help Desk" -SamAccountName "Help Desk" -GroupCategory Security -GroupScope Global -Path "OU=Restricted,DC=corp,DC=local" -ErrorAction SilentlyContinue
-    New-ADGroup -Name "IT Admins" -SamAccountName "IT Admins" -GroupCategory Security -GroupScope Global -Path "OU=Restricted,DC=corp,DC=local" -ErrorAction SilentlyContinue
-    New-ADGroup -Name "SQL Admins" -SamAccountName "SQL Admins" -GroupCategory Security -GroupScope Global -Path "OU=ServiceAccounts,DC=corp,DC=local" -ErrorAction SilentlyContinue
-    New-ADGroup -Name "Developers" -SamAccountName "Developers" -GroupCategory Security -GroupScope Universal -Path "OU=Restricted,DC=corp,DC=local" -ErrorAction SilentlyContinue
+    New-ADGroup -Name "SHIELD Agents" -SamAccountName "SHIELD Agents" -GroupCategory Security -GroupScope Global -Path "OU=Restricted,DC=corp,DC=local" -ErrorAction SilentlyContinue
+    New-ADGroup -Name "Avengers Admins" -SamAccountName "Avengers Admins" -GroupCategory Security -GroupScope Global -Path "OU=Restricted,DC=corp,DC=local" -ErrorAction SilentlyContinue
+    New-ADGroup -Name "Stark Tech DBAs" -SamAccountName "Stark Tech DBAs" -GroupCategory Security -GroupScope Global -Path "OU=ServiceAccounts,DC=corp,DC=local" -ErrorAction SilentlyContinue
+    New-ADGroup -Name "Pym Tech Devs" -SamAccountName "Pym Tech Devs" -GroupCategory Security -GroupScope Universal -Path "OU=Restricted,DC=corp,DC=local" -ErrorAction SilentlyContinue
 
     # 2. Create domain users
     $users = @(
-      @{Name="attacker"; Password="{{ domain_admin_password }}"; Groups=@("Domain Users", "Remote Desktop Users")},
-      @{Name="user1"; Password="Password123!"; Groups=@("Domain Users")},
-      @{Name="user2"; Password="Welcome1"; Groups=@("Domain Users")},
-      @{Name="user3"; Password="Summer2025!"; Groups=@("Domain Users")},
-      @{Name="user4"; Password="Password123!"; Groups=@("Domain Users")},
-      @{Name="svc_web"; Password="WebSvc2025!"; Groups=@("Domain Users", "IT Admins"); SPN="HTTP/web.corp.local"},
-      @{Name="svc_sql"; Password="SqlSvc2025!"; Groups=@("Domain Users", "SQL Admins"); SPN="MSSQLSvc/sql01.corp.local:1433"},
-      @{Name="svc_nospreauth"; Password="NoPreAuth1!"; Groups=@("Domain Users"); NoPreAuth=$true},
-      @{Name="backup_user"; Password="Backup1!"; Groups=@("Backup Operators"); Reversible=$true},
-      @{Name="helpdesk"; Password="HelpDesk1!"; Groups=@("Domain Users", "Help Desk", "Account Operators")},
-      @{Name="sync_user"; Password="Sync1!"; Groups=@("Domain Users"); DCSync=$true},
-      @{Name="rodc_admin"; Password="Rodc1!"; Groups=@("Domain Users")},
-      @{Name="developer1"; Password="Dev123!"; Groups=@("Domain Users", "Developers")},
+      @{Name="loki"; Password="{{ domain_admin_password }}"; Groups=@("Domain Users", "Remote Desktop Users")},
+      @{Name="peter.parker"; Password="Password123!"; Groups=@("Domain Users")},
+      @{Name="tony.stark"; Password="Welcome1"; Groups=@("Domain Users")},
+      @{Name="steve.rogers"; Password="Summer2025!"; Groups=@("Domain Users")},
+      @{Name="bruce.banner"; Password="Password123!"; Groups=@("Domain Users")},
+      @{Name="svc_vision"; Password="WebSvc2025!"; Groups=@("Domain Users", "Avengers Admins"); SPN="HTTP/web.corp.local"},
+      @{Name="svc_jarvis"; Password="SqlSvc2025!"; Groups=@("Domain Users", "Stark Tech DBAs"); SPN="MSSQLSvc/sql01.corp.local:1433"},
+      @{Name="svc_thanos"; Password="NoPreAuth1!"; Groups=@("Domain Users"); NoPreAuth=$true},
+      @{Name="heimdall"; Password="Backup1!"; Groups=@("Backup Operators"); Reversible=$true},
+      @{Name="nick.fury"; Password="HelpDesk1!"; Groups=@("Domain Users", "SHIELD Agents", "Account Operators")},
+      @{Name="doctor.strange"; Password="Sync1!"; Groups=@("Domain Users"); DCSync=$true},
+      @{Name="wong"; Password="Rodc1!"; Groups=@("Domain Users")},
+      @{Name="developer1"; Password="Dev123!"; Groups=@("Domain Users", "Pym Tech Devs")},
       @{Name="qa_user"; Password="Qa123!"; Groups=@("Domain Users"); Description="QA account with path to SQL"},
       @{Name="hr_user"; Password="Hr123!"; Groups=@("Domain Users", "HR")}
     )
@@ -188,8 +188,8 @@
       }
     }
 
-    # 3. Set DCSync rights for sync_user
-    $user = Get-ADUser -Identity "sync_user"
+    # 3. Set DCSync rights for doctor.strange
+    $user = Get-ADUser -Identity "doctor.strange"
     $acl = Get-ACL "AD:\DC=corp,DC=local"
     $sid = [System.Security.Principal.SecurityIdentifier] $user.SID
     $guid1 = [Guid]"1131f6aa-9c07-11d1-f79f-00c04fc2dcd2"

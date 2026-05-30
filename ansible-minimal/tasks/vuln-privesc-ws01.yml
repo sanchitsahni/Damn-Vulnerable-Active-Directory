@@ -84,7 +84,7 @@
   ignore_errors: yes
 
 # ------------------------------------------------------------------------------
-# PE-027: SeCreateSymbolicLinkPrivilege for the "Developers" local group.
+# PE-027: SeCreateSymbolicLinkPrivilege for the "Pym Tech Devs" local group.
 # Grant a domain group (developer1) the privilege via secedit.
 # ------------------------------------------------------------------------------
 - name: PE-027 - Grant SeCreateSymbolicLinkPrivilege to developer1

