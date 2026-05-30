@@ -18,12 +18,9 @@
   async: 20
   poll: 0
 
-- name: Wait for background IP change to drop the network adapter
-  pause:
-    seconds: 15
-
-- name: Wait for network to stabilize
+- name: Wait for network to stabilize and IP change to complete
   wait_for_connection:
+    delay: 15
     timeout: 60
 
 - name: Reset WinRM connection to clear stale sockets

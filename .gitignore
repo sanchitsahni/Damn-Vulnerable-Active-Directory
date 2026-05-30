@@ -3,6 +3,7 @@
 # ==============================================================================
 
 # --- Generated VM artifacts (anchored to repo root) ---
+.commandcode/
 /vms/
 *.qcow2
 *.qcow2.tmp
