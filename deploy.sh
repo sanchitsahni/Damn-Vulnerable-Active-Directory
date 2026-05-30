@@ -38,7 +38,8 @@ CFG_MEDIA_PATH="${DVAD_HOME}/media"
 CFG_DEPLOY_MODE="full"  # full | minimal | single-dc
 CFG_VPS_MODE="0"        # 1 = headless VPS (no GUI, VNC on loopback, larger VM sizing)
 CFG_VNC_BIND="127.0.0.1" # interface to bind VNC sockets to
-export CFG_MEM_TOTAL CFG_CPU_TOTAL CFG_DISK_PATH CFG_MEDIA_PATH CFG_DEPLOY_MODE CFG_VPS_MODE CFG_VNC_BIND
+CFG_DEBUG="0"
+export CFG_MEM_TOTAL CFG_CPU_TOTAL CFG_DISK_PATH CFG_MEDIA_PATH CFG_DEPLOY_MODE CFG_VPS_MODE CFG_VNC_BIND CFG_DEBUG
 
 # ==============================================================================
 # Phase 0: OS Detection & Dependency Installation
@@ -203,12 +204,41 @@ finalize() {
 }
 
 # ==============================================================================
+# Helper for Deployment Steps
+# ==============================================================================
+run_step() {
+    local step_name="$1"
+    local pct="$2"
+    local func_name="$3"
+    
+    if [ "$CFG_DEBUG" = "1" ]; then
+        log "[${pct}%] ${step_name}..."
+        "$func_name"
+    else
+        echo -e "${BLUE}[*]${NC} [${pct}%] ${step_name}... \c"
+        local log_file="/tmp/dvad_${func_name}_$$.log"
+        if "$func_name" > "$log_file" 2>&1; then
+            echo -e "${GREEN}[done]${NC}"
+            rm -f "$log_file"
+        else
+            echo -e "${RED}[failed]${NC}"
+            err "Failed during: ${step_name}"
+            err "--- ERROR LOG ---"
+            cat "$log_file"
+            err "-----------------"
+            exit 1
+        fi
+    fi
+}
+
+# ==============================================================================
 # Main
 # ==============================================================================
 main() {
     # Parse arguments
     while [[ $# -gt 0 ]]; do
         case "$1" in
+            --debug) CFG_DEBUG="1"; shift;;
             --minimal) CFG_DEPLOY_MODE="minimal"; shift;;
             --single-dc) CFG_DEPLOY_MODE="single-dc"; shift;;
             --vps) CFG_VPS_MODE="1"; shift;;
@@ -218,9 +248,11 @@ main() {
             --disk-path) CFG_DISK_PATH="$2"; shift 2;;
             --help|-h)
                 cat <<EOF
-Usage: ./deploy.sh [--minimal|--single-dc] [--vps] [--memory GB] [--cpus N]
+Usage: ./deploy.sh [--debug] [--minimal|--single-dc] [--vps] [--memory GB] [--cpus N]
                    [--disk-path PATH] [--vnc-bind ADDR]
                    [destroy|suspend|restart <vm_id>...]
+
+  --debug         Show full deployment output. Normal mode only shows percentage and minimal info.
 
   --minimal       Deploy only corp.local domain (5 VMs, ~12GB RAM)
   --single-dc     Deploy single DC for quick testing (1 VM, ~3GB RAM)
@@ -288,14 +320,14 @@ EOF
     # Ensure we're in the right directory
     cd "$DVAD_HOME"
 
-    detect_os
-    install_dependencies
-    check_kvm
-    setup_networks
-    create_vms
-    wait_for_vms
-    run_ansible
-    finalize
+    run_step "Detect OS" "10" detect_os
+    run_step "Install Dependencies" "20" install_dependencies
+    run_step "Check KVM" "30" check_kvm
+    run_step "Setup Networks" "40" setup_networks
+    run_step "Create VMs" "50" create_vms
+    run_step "Wait for VMs" "65" wait_for_vms
+    run_step "Run Ansible" "85" run_ansible
+    run_step "Finalize" "100" finalize
 
     echo ""
     echo -e "${GREEN}${BOLD}============================================================${NC}"
